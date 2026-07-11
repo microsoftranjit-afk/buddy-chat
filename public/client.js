@@ -16,25 +16,24 @@
     return av;
   }
   function fmtSize(b) { if (!b) return ""; const u = ["B", "KB", "MB", "GB"]; let i = 0; while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; } return b.toFixed(b < 10 && i > 0 ? 1 : 0) + " " + u[i]; }
-  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   const profiles = new Map();
   function setProfile(p) { if (!p || !p.username) return; profiles.set(p.username, Object.assign({}, profiles.get(p.username), p)); }
   function nameOf(u) { const p = profiles.get(u); return (p && p.displayName) || u; }
 
-  // ---- Auth state ----
+  // State
+  const state = { friends: [], requests: { incoming: [], outgoing: [] }, servers: [] };
+  let view = "dm"; // "dm" | "server"
+  let activePeer = null;   // username (DM)
+  let activeServer = null; // id
+  let activeChannel = null;// id
+
+  // ---- Auth ----
   let token = localStorage.getItem("buddy-token") || "";
   let myUser = localStorage.getItem("buddy-user") || "";
   let myName = localStorage.getItem("buddy-name") || "";
   let myPic = localStorage.getItem("buddy-pic") || "";
-  let activePeer = null;
-
-  function persistAuth() {
-    localStorage.setItem("buddy-token", token);
-    localStorage.setItem("buddy-user", myUser);
-    localStorage.setItem("buddy-name", myName);
-    localStorage.setItem("buddy-pic", myPic);
-  }
+  function persistAuth() { localStorage.setItem("buddy-token", token); localStorage.setItem("buddy-user", myUser); localStorage.setItem("buddy-name", myName); localStorage.setItem("buddy-pic", myPic); }
   function clearAuth() { token = ""; myUser = ""; myName = ""; myPic = ""; ["buddy-token", "buddy-user", "buddy-name", "buddy-pic"].forEach((k) => localStorage.removeItem(k)); }
 
   const authEl = $("auth"), appEl = $("app");
@@ -99,7 +98,7 @@
   applySettings(settings); renderAppearance();
 
   // ====================================================================
-  //  API
+  //  API + ICE
   // ====================================================================
   async function api(path, body, withAuth) {
     const headers = { "Content-Type": "application/json" };
@@ -107,8 +106,6 @@
     const res = await fetch(path, { method: "POST", headers, body: JSON.stringify(body || {}) });
     return res.json();
   }
-
-  // ---- ICE config ----
   let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
   fetch("/api/config").then((r) => r.json()).then((d) => { if (d && d.iceServers) ICE = d; }).catch(() => {});
 
@@ -150,7 +147,7 @@
     appEl.classList.remove("hidden");
     renderMyIdentity(profile);
     if (socket.connected) socket.emit("auth", { token });
-    loadFriends();
+    loadMe();
   }
   function renderMyIdentity(p) {
     myName = p.displayName; myPic = p.pic || "";
@@ -172,7 +169,7 @@
   socket.on("connect", () => { setConn("online"); if (token) socket.emit("auth", { token }); });
   socket.on("disconnect", () => setConn("offline"));
   socket.on("auth-error", () => { clearAuth(); location.reload(); });
-  socket.on("authed", ({ profile }) => { renderMyIdentity(profile); renderMyAvatar(); });
+  socket.on("authed", ({ profile }) => { renderMyIdentity(profile); renderMyAvatar(); loadMe(); });
 
   function setConn(state) {
     if (!connState) return;
@@ -180,14 +177,87 @@
   }
 
   // ====================================================================
-  //  FRIENDS + DMs
+  //  STATE SYNC
   // ====================================================================
-  async function loadFriends() {
-    try { const res = await api("/api/me", {}, true); if (res.profile) renderMyIdentity(res.profile); if (res.friends) renderFriends(res.friends); } catch {}
+  async function loadMe() {
+    try {
+      const res = await api("/api/me", {}, true);
+      if (res.profile) renderMyIdentity(res.profile);
+      if (res.friends) { state.friends = res.friends; res.friends.forEach(setProfile); }
+      if (res.requests) { state.requests = res.requests; (res.requests.incoming || []).forEach(setProfile); (res.requests.outgoing || []).forEach(setProfile); }
+      if (res.servers) { state.servers = res.servers; res.servers.forEach((s) => (s.members || []).forEach(setProfile)); }
+      renderRail();
+      if (view === "dm") { renderFriendsDom(); renderRequestsDom(); }
+      else renderServerView();
+    } catch {}
   }
-  function renderFriends(list) {
+  socket.on("friends", (list) => { state.friends = list || []; list.forEach(setProfile); if (view === "dm") renderFriendsDom(); });
+  socket.on("requests", (r) => { state.requests = r || { incoming: [], outgoing: [] }; (r.incoming || []).forEach(setProfile); (r.outgoing || []).forEach(setProfile); if (view === "dm") renderRequestsDom(); });
+  socket.on("servers", (list) => {
+    state.servers = list || [];
+    list.forEach((s) => (s.members || []).forEach(setProfile));
+    renderRail();
+    if (view === "server") {
+      if (!state.servers.find((x) => x.id === activeServer)) selectHome();
+      else renderServerView();
+    }
+  });
+  socket.on("dm-roster", (list) => list.forEach(setProfile));
+
+  // ====================================================================
+  //  RAIL (servers)
+  // ====================================================================
+  function renderRail() {
+    const list = $("serverList"); list.innerHTML = "";
+    state.servers.forEach((s) => {
+      const b = document.createElement("button");
+      b.className = "rail-item" + (view === "server" && activeServer === s.id ? " active" : "");
+      b.style.background = s.iconColor || colorFor(s.name);
+      b.textContent = (s.name || "?").trim().charAt(0).toUpperCase();
+      b.title = s.name;
+      b.onclick = () => selectServer(s.id);
+      list.appendChild(b);
+    });
+  }
+  $("homeBtn").onclick = () => selectHome();
+  $("addServerBtn").onclick = () => openPrompt("Create a server", "Server name", async (name) => {
+    const res = await api("/api/servers/create", { name }, true);
+    if (!res.ok) return flash("Could not create server.");
+    selectServer(res.server.id);
+  });
+  function selectHome() {
+    view = "dm"; activePeer = null; activeServer = null; activeChannel = null;
+    $("homeBtn").classList.add("active");
+    $("dmView").classList.remove("hidden");
+    $("serverView").classList.add("hidden");
+    messagesEl.innerHTML = ""; lastDay = "";
+    updateHeader(); updateComposer();
+    renderRail(); renderFriendsDom(); renderRequestsDom();
+  }
+  function selectServer(id) {
+    view = "server"; activePeer = null; activeServer = id; activeChannel = null;
+    $("homeBtn").classList.remove("active");
+    $("dmView").classList.add("hidden");
+    $("serverView").classList.remove("hidden");
+    const s = state.servers.find((x) => x.id === id);
+    renderRail(); renderServerView();
+    if (s && s.channels && s.channels.length) openChannel(s.channels[0].id);
+    else { messagesEl.innerHTML = ""; lastDay = ""; updateHeader(); updateComposer(); }
+  }
+  function openChannel(channelId) {
+    activeChannel = channelId; activePeer = null;
+    socket.emit("channel-open", { channelId });
+    messagesEl.innerHTML = ""; lastDay = "";
+    updateHeader(); updateComposer();
+    renderServerView();
+  }
+
+  // ====================================================================
+  //  SIDEBAR RENDERING
+  // ====================================================================
+  function renderFriendsDom() {
     const fl = $("friendsList"); fl.innerHTML = "";
-    const others = (list || []);
+    const others = state.friends || [];
     $("friendsEmpty").style.display = others.length ? "none" : "block";
     others.forEach((p) => {
       setProfile(p);
@@ -203,42 +273,122 @@
       fl.appendChild(row);
     });
   }
-  function flashFriendMsg(msg, ok) { const e = $("friendMsg"); e.textContent = msg; e.className = "friend-msg" + (ok ? " ok" : " err"); e.classList.remove("hidden"); setTimeout(() => e.classList.add("hidden"), 2500); }
+
+  function renderRequestsDom() {
+    const box = $("requestsBox"); box.innerHTML = "";
+    const inc = state.requests.incoming || [];
+    const out = state.requests.outgoing || [];
+    if (!inc.length && !out.length) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    if (inc.length) {
+      const h = document.createElement("div"); h.className = "req-head"; h.textContent = "Incoming — " + inc.length; box.appendChild(h);
+      inc.forEach((p) => {
+        setProfile(p);
+        const card = document.createElement("div"); card.className = "req-card";
+        const av = avatarEl(p.displayName, p.pic, "small");
+        const meta = document.createElement("div"); meta.className = "req-meta";
+        meta.innerHTML = '<div class="req-name">' + escapeHtml(p.displayName) + '</div><div class="req-sub">@' + escapeHtml(p.username) + ' wants to be friends</div>';
+        const acts = document.createElement("div"); acts.className = "req-acts";
+        const acc = document.createElement("button"); acc.className = "req-btn accept"; acc.innerHTML = '<svg class="icon"><use href="#icon-check"/></svg>';
+        const dec = document.createElement("button"); dec.className = "req-btn decline"; acc.title = "Accept"; dec.title = "Decline"; dec.innerHTML = '<svg class="icon"><use href="#icon-close"/></svg>';
+        acc.onclick = async () => { await api("/api/friends/accept", { friend: p.username }, true); flash("You are now friends with @" + p.username + "."); };
+        dec.onclick = async () => { await api("/api/friends/decline", { friend: p.username }, true); };
+        acts.append(acc, dec); card.append(av, meta, acts); box.appendChild(card);
+      });
+    }
+    if (out.length) {
+      const h = document.createElement("div"); h.className = "req-head"; h.textContent = "Outgoing — " + out.length; box.appendChild(h);
+      out.forEach((p) => {
+        setProfile(p);
+        const card = document.createElement("div"); card.className = "req-card";
+        const av = avatarEl(p.displayName, p.pic, "small");
+        const meta = document.createElement("div"); meta.className = "req-meta";
+        meta.innerHTML = '<div class="req-name">' + escapeHtml(p.displayName) + '</div><div class="req-sub">Request sent to @' + escapeHtml(p.username) + '</div>';
+        card.append(av, meta); box.appendChild(card);
+      });
+    }
+  }
+
+  function renderServerView() {
+    const s = state.servers.find((x) => x.id === activeServer);
+    if (!s) { $("serverView").classList.add("hidden"); $("dmView").classList.remove("hidden"); return; }
+    $("serverName").textContent = s.name;
+    // channels
+    const cl = $("channelList"); cl.innerHTML = "";
+    (s.channels || []).forEach((c) => {
+      const row = document.createElement("div");
+      row.className = "channel" + (c.id === activeChannel ? " active" : "");
+      row.innerHTML = '<svg class="icon chan-icon"><use href="#icon-hash"/></svg><span>' + escapeHtml(c.name) + '</span>';
+      row.onclick = () => openChannel(c.id);
+      cl.appendChild(row);
+    });
+    // members (online first)
+    const ml = $("memberList"); ml.innerHTML = "";
+    const members = (s.members || []).slice().sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+    members.forEach((m) => {
+      const row = document.createElement("div"); row.className = "member";
+      const av = avatarEl(m.displayName, m.pic, "small");
+      const dot = document.createElement("span"); dot.className = "ondot" + (m.online ? " on" : ""); av.appendChild(dot);
+      const nm = document.createElement("div"); nm.className = "member-name"; nm.textContent = (m.username === myUser ? m.displayName + " (you)" : m.displayName);
+      row.append(av, nm); ml.appendChild(row);
+    });
+    $("memberCount").textContent = (s.members || []).length;
+  }
+
+  function flash(msg) { const e = $("friendMsg"); e.textContent = msg; e.className = "friend-msg ok"; e.classList.remove("hidden"); setTimeout(() => e.classList.add("hidden"), 2800); }
+
+  // Add friend (sends request)
+  document.querySelector(".add-friend").addEventListener("click", (e) => { if (e.target.closest(".field-icon")) addFriend(); });
   $("friendInput").addEventListener("keydown", (e) => { if (e.key === "Enter") addFriend(); });
   async function addFriend() {
     const f = $("friendInput").value.trim(); if (!f) return;
-    const res = await api("/api/friends/add", { friend: f }, true);
-    if (!res.ok) return flashFriendMsg(res.error || "Could not add.", false);
-    $("friendInput").value = ""; flashFriendMsg("Added @" + f, true); renderFriends(res.friends);
+    const res = await api("/api/friends/request", { friend: f }, true);
+    if (!res.ok) return flash(res.error || "Could not send request.");
+    $("friendInput").value = ""; flash("Friend request sent to @" + f + ".");
   }
-  // add-friend button is the + icon inside the input; make whole row clickable
-  document.querySelector(".add-friend").addEventListener("click", (e) => { if (e.target.closest(".field-icon")) addFriend(); });
+
+  // Server actions
+  $("addChannelBtn").onclick = () => { if (!activeServer) return; openPrompt("Create channel", "channel-name", async (name) => { const res = await api("/api/servers/channel", { serverId: activeServer, name }, true); if (!res.ok) return flash(res.error || "Could not create channel."); const ch = res.server.channels[res.server.channels.length - 1]; openChannel(ch.id); }); };
+  $("inviteBtn").onclick = () => { if (!activeServer) return; openPrompt("Invite to server", "Username", async (name) => { const res = await api("/api/servers/invite", { serverId: activeServer, username: name }, true); if (!res.ok) return flash(res.error || "Could not invite."); flash("@" + name + " invited."); }); };
 
   function openDM(friendUser, silent) {
     activePeer = profiles.get(friendUser) || { username: friendUser, displayName: friendUser };
-    updateHeader();
-    messagesEl.innerHTML = ""; lastDay = "";
-    msgInput.disabled = false; $("sendBtn").disabled = false; $("attachBtn").disabled = false; $("mediaBtn").disabled = false;
-    $("callBtn").classList.remove("hidden");
+    activeChannel = null; activeServer = null; view = "dm";
+    $("homeBtn").classList.add("active");
+    $("serverView").classList.add("hidden");
+    $("dmView").classList.remove("hidden");
+    updateHeader(); messagesEl.innerHTML = ""; lastDay = "";
+    updateComposer();
     socket.emit("dm-open", { friend: friendUser });
     if (!silent) socket.emit("dm-invite", { friend: friendUser });
-    renderFriends([...profiles.values()].filter((p) => p.username !== myUser));
+    renderFriendsDom();
   }
-  socket.on("friends", (list) => renderFriends(list));
-  socket.on("dm-roster", (list) => list.forEach(setProfile));
   socket.on("dm-invite", ({ from }) => { if (!inCall) openDM(from, true); });
 
   function updateHeader() {
     const peerAvatar = $("peerAvatar"), roomLabel = $("roomLabel"), presence = $("presence");
-    if (activePeer) {
+    if (view === "dm" && activePeer) {
       peerAvatar.classList.remove("hidden"); peerAvatar.innerHTML = ""; peerAvatar.appendChild(avatarEl(activePeer.displayName, activePeer.pic, ""));
       roomLabel.textContent = activePeer.displayName;
       const on = (profiles.get(activePeer.username) || {}).online;
       presence.textContent = (activePeer.bio ? activePeer.bio + "  ·  " : "") + "@" + activePeer.username;
       presence.classList.toggle("online", !!on);
+      $("callBtn").classList.remove("hidden");
+    } else if (view === "server" && activeServer) {
+      const s = state.servers.find((x) => x.id === activeServer);
+      const ch = s && s.channels.find((c) => c.id === activeChannel);
+      peerAvatar.classList.add("hidden");
+      roomLabel.textContent = ch ? "# " + ch.name : "Server";
+      presence.textContent = s ? s.name : "";
+      presence.classList.remove("online");
+      $("callBtn").classList.add("hidden");
     } else {
-      peerAvatar.classList.add("hidden"); roomLabel.textContent = "Buddy"; presence.textContent = "Select a friend to start chatting"; presence.classList.remove("online");
+      peerAvatar.classList.add("hidden"); roomLabel.textContent = "Buddy"; presence.textContent = "Select a friend or server to start"; presence.classList.remove("online"); $("callBtn").classList.add("hidden");
     }
+  }
+  function updateComposer() {
+    const on = (view === "dm" && activePeer) || (view === "server" && activeChannel);
+    msgInput.disabled = !on; $("sendBtn").disabled = !on; $("attachBtn").disabled = !on; $("mediaBtn").disabled = !on;
   }
 
   // ====================================================================
@@ -273,9 +423,7 @@
           const v = document.createElement("video"); v.src = m.url; v.controls = true; v.playsInline = true; v.preload = "metadata"; bubble.appendChild(v);
           const cap = document.createElement("div"); cap.className = "file-size"; cap.style.padding = "6px 4px 2px"; cap.textContent = "Video" + (m.size ? " · " + fmtSize(m.size) : ""); bubble.appendChild(cap);
         }
-        else if (m.kind === "image") {
-          const img = document.createElement("img"); img.src = m.url; img.alt = m.name || "image"; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img);
-        }
+        else if (m.kind === "image") { const img = document.createElement("img"); img.src = m.url; img.alt = m.name || "image"; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
         else { const img = document.createElement("img"); img.src = m.url; img.alt = m.kind; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
       } else { bubble.textContent = m.text; }
       const time = document.createElement("div"); time.className = "time"; time.textContent = new Date(m.ts || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -292,9 +440,10 @@
   $("sendBtn").addEventListener("click", send);
   msgInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && settings.enter && !msgInput.disabled) { e.preventDefault(); send(); } });
 
-  socket.on("history", (msgs) => msgs.forEach((m) => appendMessage(m)));
+  socket.on("history", (msgs) => { messagesEl.innerHTML = ""; lastDay = ""; msgs.forEach((m) => appendMessage(m)); });
   socket.on("message", (m) => appendMessage(m));
   socket.on("deleted", ({ id }) => { const el = [...messagesEl.children].find((c) => c.dataset.id === id); if (el) el.remove(); });
+  socket.on("channel-info", () => updateHeader());
 
   // ====================================================================
   //  PROFILE EDITING
@@ -311,8 +460,8 @@
   $("bioEdit").addEventListener("change", () => { api("/api/profile", { bio: $("bioEdit").value.trim() }, true); });
   $("savePass").onclick = async () => {
     const res = await api("/api/profile", { oldPassword: $("oldPass").value, newPassword: $("newPass").value }, true);
-    if (!res.ok) return flashFriendMsg(res.error || "Password not updated.", false);
-    $("oldPass").value = ""; $("newPass").value = ""; flashFriendMsg("Password updated.", true);
+    if (!res.ok) return flash(res.error || "Password not updated.");
+    $("oldPass").value = ""; $("newPass").value = ""; flash("Password updated.");
   };
 
   // ====================================================================
@@ -363,14 +512,13 @@
   }
 
   // ====================================================================
-  //  FILE UPLOADS (images / videos)
+  //  FILE UPLOADS
   // ====================================================================
   $("attachBtn").onclick = () => $("fileInput").click();
   $("fileInput").addEventListener("change", (e) => { handleFiles(e.target.files); e.target.value = ""; });
-
   function handleFiles(files) {
     [...(files || [])].forEach((file) => {
-      if (!/^(image|video)\//.test(file.type)) { flashFriendMsg("Only images and videos can be sent.", false); return; }
+      if (!/^(image|video)\//.test(file.type)) { flash("Only images and videos can be sent."); return; }
       uploadFile(file);
     });
   }
@@ -383,25 +531,19 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Upload failed.");
       socket.emit("file", { url: data.url, kind: data.kind, name: data.name, size: data.size });
-    } catch (err) {
-      flashFriendMsg(err.message || "Upload failed.", false);
-    } finally {
-      sending.remove();
-    }
+    } catch (err) { flash(err.message || "Upload failed."); }
+    finally { sending.remove(); }
   }
   function appendSending(file) {
     const el = document.createElement("div"); el.className = "msg mine";
     const wrap = document.createElement("div"); wrap.className = "bubble-wrap";
     const bubble = document.createElement("div"); bubble.className = "bubble";
-    const isImg = file.type.startsWith("image");
-    if (isImg) { const img = document.createElement("img"); img.src = URL.createObjectURL(file); img.style.maxWidth = "320px"; img.style.maxHeight = "360px"; img.style.borderRadius = "10px"; bubble.appendChild(img); }
+    if (file.type.startsWith("image")) { const img = document.createElement("img"); img.src = URL.createObjectURL(file); img.style.maxWidth = "320px"; img.style.maxHeight = "360px"; img.style.borderRadius = "10px"; bubble.appendChild(img); }
     else { bubble.textContent = "Sending " + file.name + "…"; }
     const time = document.createElement("div"); time.className = "time"; time.textContent = "sending…";
     wrap.append(bubble, time); el.append(wrap); messagesEl.appendChild(el); messagesEl.scrollTop = messagesEl.scrollHeight;
     return el;
   }
-
-  // Drag & drop
   const chat = document.querySelector(".chat");
   ["dragenter", "dragover"].forEach((ev) => chat.addEventListener(ev, (e) => { if ([...(e.dataTransfer && e.dataTransfer.types || [])].includes("Files")) { e.preventDefault(); $("dropHint").classList.remove("hidden"); } }));
   ["dragleave", "drop"].forEach((ev) => chat.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "dragleave" && e.relatedTarget && chat.contains(e.relatedTarget)) return; $("dropHint").classList.add("hidden"); }));
@@ -431,7 +573,7 @@
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) refreshDevices();
 
   // ====================================================================
-  //  CALLS (WebRTC) — robust, with audio
+  //  CALLS (WebRTC)
   // ====================================================================
   const callOverlay = $("callOverlay"), localVideo = $("localVideo"), remoteVideo = $("remoteVideo"), callStatus = $("callStatus"), callAvatar = $("callAvatar");
   let localStream = null, peer = null, inCall = false, pendingOffer = null, ringFrom = null, pendingCandidates = [];
@@ -469,23 +611,15 @@
     if (asInitiator) {
       callStatus.textContent = "Ringing…";
       try { const offer = await peer.createOffer(); await peer.setLocalDescription(offer); socket.emit("call:offer", offer); } catch (e) { console.error(e); }
-    } else if (pendingOffer) {
-      await handleOffer(pendingOffer); pendingOffer = null;
-    }
+    } else if (pendingOffer) { await handleOffer(pendingOffer); pendingOffer = null; }
   }
   async function handleOffer(offer) {
     if (!inCall) await startCall(false);
     callStatus.textContent = "Connected";
     if (!peer) { peer = makePeer(); localStream.getTracks().forEach((t) => peer.addTrack(t, localStream)); }
-    try {
-      await peer.setRemoteDescription(new RTCSessionDescription(offer));
-      await flushCandidates();
-      const answer = await peer.createAnswer(); await peer.setLocalDescription(answer); socket.emit("call:answer", answer);
-    } catch (e) { console.error(e); }
+    try { await peer.setRemoteDescription(new RTCSessionDescription(offer)); await flushCandidates(); const answer = await peer.createAnswer(); await peer.setLocalDescription(answer); socket.emit("call:answer", answer); } catch (e) { console.error(e); }
   }
-  async function flushCandidates() {
-    while (pendingCandidates.length) { try { await peer.addIceCandidate(pendingCandidates.shift()); } catch (e) {} }
-  }
+  async function flushCandidates() { while (pendingCandidates.length) { try { await peer.addIceCandidate(pendingCandidates.shift()); } catch (e) {} } }
   function endCall() {
     hideIncoming();
     if (peer) { try { peer.close(); } catch {} peer = null; }
@@ -500,7 +634,6 @@
   $("hangupBtn").onclick = endCall;
   $("endCall").onclick = endCall;
 
-  // Incoming call UI
   const incoming = $("incoming");
   function showIncoming(from, fromName) {
     ringFrom = from;
@@ -511,17 +644,11 @@
     beep();
   }
   function hideIncoming() { incoming.classList.add("hidden"); ringFrom = null; }
-  async function acceptCall() {
-    hideIncoming();
-    if (ringFrom) openDM(ringFrom, true);
-    socket.emit("call:accept");
-    await startCall(false);
-  }
+  async function acceptCall() { hideIncoming(); if (ringFrom) openDM(ringFrom, true); socket.emit("call:accept"); await startCall(false); }
   function declineCall() { socket.emit("call:reject"); hideIncoming(); }
   $("incomingAccept").onclick = acceptCall;
   $("incomingDecline").onclick = declineCall;
 
-  // Call signaling
   socket.on("call:ring", ({ from, fromName }) => { if (inCall) return; showIncoming(from, fromName); });
   socket.on("call:offer", ({ offer }) => { if (inCall) handleOffer(offer); else pendingOffer = offer; });
   socket.on("call:answer", async ({ answer }) => { callStatus.textContent = "Connected"; if (peer) { try { await peer.setRemoteDescription(new RTCSessionDescription(answer)); await flushCandidates(); } catch (e) {} } });
@@ -530,7 +657,6 @@
   socket.on("call:reject", () => { callStatus.textContent = "Call declined"; endCall(); });
   socket.on("call:end", () => { if (inCall || !incoming.classList.contains("hidden")) { callStatus.textContent = "Call ended"; endCall(); } });
 
-  // Mute / camera
   $("toggleAudio").onclick = () => { const t = localStream && localStream.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; setIcon($("toggleAudio"), t.enabled ? "icon-mic" : "icon-mic-off"); $("toggleAudio").classList.toggle("hangup", !t.enabled); } };
   $("toggleVideo").onclick = () => { const t = localStream && localStream.getVideoTracks()[0]; if (t) { t.enabled = !t.enabled; setIcon($("toggleVideo"), t.enabled ? "icon-video" : "icon-video-off"); $("toggleVideo").classList.toggle("hangup", !t.enabled); localVideo.classList.toggle("hidden-cam", !t.enabled); if (!t.enabled) callAvatar.classList.remove("hidden"); else callAvatar.classList.add("hidden"); } };
 
@@ -538,8 +664,23 @@
   function beep() { try { beepAudio = beepAudio || new (window.AudioContext || window.webkitAudioContext)(); const o = beepAudio.createOscillator(); const g = beepAudio.createGain(); o.connect(g); g.connect(beepAudio.destination); o.frequency.value = 520; g.gain.value = 0.06; o.start(); o.stop(beepAudio.currentTime + 0.9); } catch {} }
 
   // ====================================================================
+  //  PROMPT MODAL
+  // ====================================================================
+  let promptCb = null;
+  function openPrompt(title, placeholder, cb, value) {
+    $("promptTitle").textContent = title;
+    const i = $("promptInput"); i.value = value || ""; i.placeholder = placeholder || "";
+    promptCb = cb; $("promptModal").classList.remove("hidden"); setTimeout(() => i.focus(), 50);
+  }
+  function closePrompt() { $("promptModal").classList.add("hidden"); promptCb = null; }
+  $("promptOk").onclick = () => { const v = $("promptInput").value.trim(); const cb = promptCb; closePrompt(); if (cb && v) cb(v); };
+  $("promptCancel").onclick = closePrompt;
+  $("promptInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("promptOk").click(); if (e.key === "Escape") closePrompt(); });
+
+  // ====================================================================
   //  AUTO-LOGIN
   // ====================================================================
-  if (token) { authEl.classList.add("hidden"); appEl.classList.remove("hidden"); loadFriends(); renderMyIdentityPlaceholder(); }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  if (token) { authEl.classList.add("hidden"); appEl.classList.remove("hidden"); loadMe(); renderMyIdentityPlaceholder(); }
   function renderMyIdentityPlaceholder() { $("meUser").textContent = "@" + myUser; $("meName").textContent = myName; renderMyAvatar(); $("nameEdit").value = myName; $("userEdit").value = "@" + myUser; }
 })();

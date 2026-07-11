@@ -39,13 +39,30 @@ let fileConfig = {};
 try { fileConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")); } catch {}
 const KLIPY_KEY = process.env.KLIPY_API_KEY || fileConfig.klipyKey || "";
 
-// ---- User store (persisted) ----
+// ---- Stores ----
 const DATA_DIR = path.join(__dirname, "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const USERS_FILE = path.join(DATA_DIR, "users.json");
+const SERVERS_FILE = path.join(DATA_DIR, "servers.json");
+
 let users = {};
 try { users = JSON.parse(fs.readFileSync(USERS_FILE, "utf8")); } catch {}
+let servers = {};
+try { servers = JSON.parse(fs.readFileSync(SERVERS_FILE, "utf8")); } catch {}
+
+// Migrate user records to new shape
+for (const k in users) {
+  const u = users[k];
+  if (!Array.isArray(u.friends)) u.friends = [];
+  if (!Array.isArray(u.incoming)) u.incoming = [];
+  if (!Array.isArray(u.outgoing)) u.outgoing = [];
+  if (!Array.isArray(u.servers)) u.servers = [];
+}
 function saveUsers() { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); }
+function saveServers() { fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2)); }
+
+const SERVER_COLORS = ["#5865f2", "#e15e54", "#ee8a4a", "#bfa54e", "#5fb05f", "#4aa3a8", "#5a8fd6", "#8e6cc0", "#d463a4", "#6d8a96"];
+function colorFor(name) { let h = 0; for (let i = 0; i < (name || "?").length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return SERVER_COLORS[h % SERVER_COLORS.length]; }
 
 function norm(u) { return String(u || "").trim().toLowerCase(); }
 function validUser(u) { return /^[a-zA-Z0-9_]{3,20}$/.test(u); }
@@ -71,20 +88,64 @@ function friendView(uname) {
   p.online = online.has(uname);
   return p;
 }
+function memberView(uname) {
+  const p = publicProfile(uname);
+  if (!p) return null;
+  p.online = online.has(uname);
+  return p;
+}
+function serverView(id) {
+  const s = servers[id];
+  if (!s) return null;
+  return {
+    id: s.id, name: s.name, owner: s.owner, iconColor: s.iconColor,
+    channels: s.channels.map((c) => ({ id: c.id, name: c.name })),
+    members: s.members.map(memberView).filter(Boolean),
+  };
+}
+function serverOfChannel(channelId) {
+  for (const id in servers) if (servers[id].channels.some((c) => c.id === channelId)) return id;
+  return null;
+}
 
-// ---- Sessions (in-memory) ----
-const sessions = new Map(); // token -> usernameLower
+// ---- Sessions / presence ----
+const sessions = new Map();
 function newSession(uname) { const t = crypto.randomBytes(24).toString("hex"); sessions.set(t, uname); return t; }
-
-// online usernames
 const online = new Set();
+
+// ---- Push helpers ----
+function emitFriendsTo(uname) {
+  if (!users[uname]) return;
+  const list = (users[uname].friends || []).map(friendView).filter(Boolean);
+  io.to("user:" + uname).emit("friends", list);
+}
+function emitRequestsTo(uname) {
+  if (!users[uname]) return;
+  io.to("user:" + uname).emit("requests", {
+    incoming: (users[uname].incoming || []).map(publicProfile).filter(Boolean),
+    outgoing: (users[uname].outgoing || []).map(publicProfile).filter(Boolean),
+  });
+}
+function emitServersTo(uname) {
+  if (!users[uname]) return;
+  const list = (users[uname].servers || []).map(serverView).filter(Boolean);
+  io.to("user:" + uname).emit("servers", list);
+}
+function emitStateTo(uname) { emitFriendsTo(uname); emitRequestsTo(uname); emitServersTo(uname); }
+function notifyPresence(uname) {
+  const seen = new Set();
+  const push = (t) => { if (t && t !== uname && !seen.has(t)) { seen.add(t); emitFriendsTo(t); emitServersTo(t); } };
+  (users[uname].friends || []).forEach(push);
+  (users[uname].incoming || []).forEach(push);
+  (users[uname].outgoing || []).forEach(push);
+  (users[uname].servers || []).forEach((sid) => (servers[sid] ? servers[sid].members : []).forEach(push));
+}
 
 // ---- HTTP API ----
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/healthz", (req, res) => res.json({ ok: true }));
 
-// ---- ICE servers (STUN + optional TURN via env) ----
 app.get("/api/config", (req, res) => {
   const ice = [
     { urls: "stun:stun.l.google.com:19302" },
@@ -100,7 +161,6 @@ app.get("/api/config", (req, res) => {
   res.json({ iceServers: ice });
 });
 
-// ---- Media upload (images / videos) ----
 app.post("/api/upload", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   upload.single("file")(req, res, (err) => {
@@ -122,7 +182,11 @@ function authToken(req) {
   return t;
 }
 function userFromToken(t) { return t ? sessions.get(t) : null; }
-
+function requireUser(req, res) {
+  const uname = userFromToken(authToken(req));
+  if (!uname || !users[uname]) { res.status(401).json({ error: "Not authenticated." }); return null; }
+  return uname;
+}
 function findUser(login) {
   const u = norm(login);
   if (users[u]) return u;
@@ -145,7 +209,8 @@ app.post("/api/signup", (req, res) => {
   const { salt, hash } = hashPassword(password);
   users[uname] = {
     username, displayName: (displayName && displayName.trim()) || username,
-    email: email ? email.toLowerCase() : "", salt, hash, pic: "", bio: "", friends: [],
+    email: email ? email.toLowerCase() : "", salt, hash, pic: "", bio: "",
+    friends: [], incoming: [], outgoing: [], servers: [],
   };
   saveUsers();
   const token = newSession(uname);
@@ -161,15 +226,17 @@ app.post("/api/login", (req, res) => {
   res.json({ ok: true, token, profile: publicProfile(uname) });
 });
 
-function requireUser(req, res) {
-  const uname = userFromToken(authToken(req));
-  if (!uname || !users[uname]) { res.status(401).json({ error: "Not authenticated." }); return null; }
-  return uname;
-}
-
 app.get("/api/me", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
-  res.json({ profile: publicProfile(uname), friends: (users[uname].friends || []).map(friendView).filter(Boolean) });
+  res.json({
+    profile: publicProfile(uname),
+    friends: (users[uname].friends || []).map(friendView).filter(Boolean),
+    requests: {
+      incoming: (users[uname].incoming || []).map(publicProfile).filter(Boolean),
+      outgoing: (users[uname].outgoing || []).map(publicProfile).filter(Boolean),
+    },
+    servers: (users[uname].servers || []).map(serverView).filter(Boolean),
+  });
 });
 
 app.post("/api/profile", (req, res) => {
@@ -185,40 +252,123 @@ app.post("/api/profile", (req, res) => {
     const h = hashPassword(newPassword); u.salt = h.salt; u.hash = h.hash;
   }
   saveUsers();
-  emitFriendsTo(uname);
+  emitFriendsTo(uname); emitServersTo(uname);
   res.json({ ok: true, profile: publicProfile(uname) });
 });
 
-app.post("/api/friends/add", (req, res) => {
+// ---- Friend requests ----
+app.post("/api/friends/request", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   const friend = norm(req.body && req.body.friend);
   if (!validUser(friend)) return res.status(400).json({ error: "Invalid username." });
   if (friend === uname) return res.status(400).json({ error: "You can't add yourself." });
   if (!users[friend]) return res.status(404).json({ error: "No user with that username." });
   const me = users[uname], them = users[friend];
+  if (me.friends.includes(friend)) return res.status(409).json({ error: "You're already friends." });
+  if (me.outgoing.includes(friend)) return res.status(409).json({ error: "Friend request already sent." });
+  if (me.incoming.includes(friend)) return res.status(409).json({ error: "They already sent you a request." });
+  me.outgoing.push(friend);
+  if (!them.incoming.includes(uname)) them.incoming.push(uname);
+  saveUsers();
+  emitRequestsTo(uname); emitRequestsTo(friend);
+  res.json({ ok: true });
+});
+
+app.post("/api/friends/accept", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const friend = norm(req.body && req.body.friend);
+  const me = users[uname], them = users[friend];
+  if (!me || !them) return res.status(404).json({ error: "User not found." });
+  if (!me.incoming.includes(friend)) return res.status(400).json({ error: "No pending request from that user." });
+  me.incoming = me.incoming.filter((x) => x !== friend);
+  them.outgoing = (them.outgoing || []).filter((x) => x !== uname);
   if (!me.friends.includes(friend)) me.friends.push(friend);
   if (!them.friends.includes(uname)) them.friends.push(uname);
   saveUsers();
-  emitFriendsTo(uname); emitFriendsTo(friend);
+  emitStateTo(uname); emitStateTo(friend);
   res.json({ ok: true, friends: me.friends.map(friendView).filter(Boolean) });
+});
+
+app.post("/api/friends/decline", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const friend = norm(req.body && req.body.friend);
+  const me = users[uname], them = users[friend];
+  if (me) me.incoming = (me.incoming || []).filter((x) => x !== friend);
+  if (them) them.outgoing = (them.outgoing || []).filter((x) => x !== uname);
+  saveUsers();
+  emitRequestsTo(uname); if (them) emitRequestsTo(friend);
+  res.json({ ok: true });
 });
 
 app.post("/api/friends/remove", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   const friend = norm(req.body && req.body.friend);
   const me = users[uname], them = users[friend];
-  if (me) me.friends = (me.friends || []).filter((f) => f !== friend);
-  if (them) them.friends = (them.friends || []).filter((f) => f !== uname);
+  if (me) { me.friends = (me.friends || []).filter((f) => f !== friend); me.incoming = (me.incoming || []).filter((f) => f !== friend); me.outgoing = (me.outgoing || []).filter((f) => f !== friend); }
+  if (them) { them.friends = (them.friends || []).filter((f) => f !== uname); them.incoming = (them.incoming || []).filter((f) => f !== uname); them.outgoing = (them.outgoing || []).filter((f) => f !== uname); }
   saveUsers();
-  emitFriendsTo(uname); emitFriendsTo(friend);
+  emitStateTo(uname); if (them) emitStateTo(friend);
   res.json({ ok: true });
 });
 
-function emitFriendsTo(uname) {
-  if (!users[uname]) return;
-  const list = (users[uname].friends || []).map(friendView).filter(Boolean);
-  io.to("user:" + uname).emit("friends", list);
-}
+// ---- Servers ----
+function newId(p) { return p + crypto.randomBytes(6).toString("hex"); }
+
+app.post("/api/servers/create", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const name = (req.body && req.body.name || "").trim().slice(0, 40) || "New Server";
+  const id = newId("srv_");
+  servers[id] = { id, name, owner: uname, iconColor: colorFor(name), members: [uname], channels: [{ id: newId("ch_"), name: "general" }] };
+  if (!users[uname].servers.includes(id)) users[uname].servers.push(id);
+  saveServers(); saveUsers();
+  emitServersTo(uname);
+  res.json({ ok: true, server: serverView(id) });
+});
+
+app.post("/api/servers/invite", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const id = req.body && req.body.serverId;
+  const who = norm(req.body && req.body.username);
+  const s = servers[id];
+  if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!s.members.includes(uname)) return res.status(403).json({ error: "You're not in this server." });
+  if (!users[who]) return res.status(404).json({ error: "No user with that username." });
+  if (s.members.includes(who)) return res.status(409).json({ error: "Already a member." });
+  s.members.push(who);
+  if (!users[who].servers.includes(id)) users[who].servers.push(id);
+  saveServers(); saveUsers();
+  emitServersTo(uname); emitServersTo(who);
+  res.json({ ok: true, server: serverView(id) });
+});
+
+app.post("/api/servers/channel", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const id = req.body && req.body.serverId;
+  const name = (req.body && req.body.name || "").trim().slice(0, 40);
+  const s = servers[id];
+  if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!s.members.includes(uname)) return res.status(403).json({ error: "You're not in this server." });
+  if (!/^[a-zA-Z0-9 _-]{1,40}$/.test(name)) return res.status(400).json({ error: "Invalid channel name." });
+  const channelId = newId("ch_");
+  s.channels.push({ id: channelId, name: name.toLowerCase().replace(/\s+/g, "-") });
+  saveServers();
+  s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true, server: serverView(id) });
+});
+
+app.post("/api/servers/leave", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const id = req.body && req.body.serverId;
+  const s = servers[id];
+  if (!s) return res.status(404).json({ error: "Server not found." });
+  s.members = s.members.filter((m) => m !== uname);
+  users[uname].servers = (users[uname].servers || []).filter((x) => x !== id);
+  if (s.members.length === 0) delete servers[id];
+  else if (s.owner === uname) s.owner = s.members[0];
+  saveServers(); saveUsers();
+  emitServersTo(uname); s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true });
+});
 
 // ---- Klipy proxy ----
 async function klipy(req, res, type, endpoint) {
@@ -240,11 +390,25 @@ app.get("/api/gifs/search", (req, res) => klipy(req, res, "gifs", "search"));
 app.get("/api/stickers/trending", (req, res) => klipy(req, res, "stickers", "trending"));
 app.get("/api/stickers/search", (req, res) => klipy(req, res, "stickers", "search"));
 
-// ---- Socket (DMs) ----
+// ---- Socket ----
 const dmRoom = (a, b) => "dm:" + [a, b].sort().join("|");
-// per-room message history (in-memory)
-const history = new Map(); // room -> [msg]
+const history = new Map();
 function roomMsgs(room) { if (!history.has(room)) history.set(room, []); return history.get(room); }
+
+function canPost(room, uname) {
+  if (room.startsWith("dm:")) {
+    const parts = room.slice(3).split("|");
+    const other = parts[0] === uname ? parts[1] : parts[0];
+    return users[uname] && users[uname].friends.includes(other);
+  }
+  if (room.startsWith("chan:")) {
+    const cid = room.slice(5);
+    const sid = serverOfChannel(cid);
+    const s = sid && servers[sid];
+    return !!(s && s.members.includes(uname));
+  }
+  return false;
+}
 
 io.on("connection", (socket) => {
   socket.user = null;
@@ -257,9 +421,8 @@ io.on("connection", (socket) => {
     online.add(u);
     socket.join("user:" + u);
     socket.emit("authed", { profile: publicProfile(u) });
-    emitFriendsTo(u);
-    // notify friends of presence
-    (users[u].friends || []).forEach((f) => emitFriendsTo(f));
+    emitStateTo(u);
+    notifyPresence(u);
   });
 
   function ensureAuth() { return !!socket.user; }
@@ -276,38 +439,43 @@ io.on("connection", (socket) => {
     socket.emit("dm-roster", [publicProfile(socket.user), publicProfile(f)].filter(Boolean));
   });
 
+  socket.on("channel-open", ({ channelId }) => {
+    if (!ensureAuth()) return;
+    const sid = serverOfChannel(channelId);
+    const s = sid && servers[sid];
+    if (!s || !s.members.includes(socket.user)) return;
+    if (socket.activeRoom) socket.leave(socket.activeRoom);
+    const room = "chan:" + channelId;
+    socket.activeRoom = room;
+    socket.join(room);
+    const ch = s.channels.find((c) => c.id === channelId);
+    socket.emit("history", roomMsgs(room).slice(-100));
+    socket.emit("channel-info", { serverId: sid, channelId, name: ch ? ch.name : "", serverName: s.name });
+  });
+
   socket.on("dm-invite", ({ friend }) => {
     if (!ensureAuth()) return;
     const f = norm(friend);
     if (users[socket.user].friends.includes(f)) io.to("user:" + f).emit("dm-invite", { from: users[socket.user].username });
   });
 
+  function postMessage(msg) {
+    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
+    io.to(socket.activeRoom).emit("message", msg);
+  }
   socket.on("message", (text) => {
-    if (!ensureAuth() || !socket.activeRoom) return;
-    const msg = { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, text: String(text).slice(0, 4000), ts: Date.now() };
-    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
-    io.to(socket.activeRoom).emit("message", msg);
+    if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
+    postMessage({ id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, text: String(text).slice(0, 4000), ts: Date.now() });
   });
-
   socket.on("media", ({ url, kind }) => {
-    if (!ensureAuth() || !socket.activeRoom) return;
+    if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
     if (typeof url !== "string" || !/^https?:\/\//.test(url)) return;
-    const msg = { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: kind === "sticker" ? "sticker" : "gif", url: url.slice(0, 2000), ts: Date.now() };
-    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
-    io.to(socket.activeRoom).emit("message", msg);
+    postMessage({ id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: kind === "sticker" ? "sticker" : "gif", url: url.slice(0, 2000), ts: Date.now() });
   });
-
   socket.on("file", ({ url, kind, name, size }) => {
-    if (!ensureAuth() || !socket.activeRoom) return;
+    if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
     if (typeof url !== "string" || !/^\/uploads\//.test(url)) return;
-    const msg = {
-      id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"),
-      user: users[socket.user].username,
-      kind: kind === "video" ? "video" : "image",
-      url: url.slice(0, 400), name: String(name || "").slice(0, 200), size: Number(size) || 0, ts: Date.now(),
-    };
-    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
-    io.to(socket.activeRoom).emit("message", msg);
+    postMessage({ id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: kind === "video" ? "video" : "image", url: url.slice(0, 400), name: String(name || "").slice(0, 200), size: Number(size) || 0, ts: Date.now() });
   });
 
   socket.on("delete", ({ id }) => {
@@ -319,10 +487,8 @@ io.on("connection", (socket) => {
     io.to(socket.activeRoom).emit("deleted", { id });
   });
 
-  // calls relayed to the active DM room
-  socket.on("call:ring", () => {
-    if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ring", { from: users[socket.user].username, fromName: users[socket.user].displayName });
-  });
+  // calls (DM only)
+  socket.on("call:ring", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ring", { from: users[socket.user].username, fromName: users[socket.user].displayName }); });
   socket.on("call:offer", (offer) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:offer", { from: socket.id, offer }); });
   socket.on("call:answer", (answer) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:answer", { from: socket.id, answer }); });
   socket.on("call:ice", (candidate) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ice", { from: socket.id, candidate }); });
@@ -333,7 +499,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     if (socket.user) {
       online.delete(socket.user);
-      (users[socket.user].friends || []).forEach((f) => emitFriendsTo(f));
+      notifyPresence(socket.user);
     }
   });
 });
