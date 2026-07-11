@@ -25,7 +25,12 @@ function startLocalServer() {
   process.env.PORT = String(process.env.PORT || 45900);
   process.env.DATA_DIR = path.join(app.getPath("userData"), "data");
   process.env.UPLOAD_DIR = path.join(app.getPath("userData"), "uploads");
-  return require("./server.js");
+  try {
+    return require("./server.js");
+  } catch (e) {
+    console.error("Local server not available in this build:", e.message);
+    return null;
+  }
 }
 
 let currentUrl = null;

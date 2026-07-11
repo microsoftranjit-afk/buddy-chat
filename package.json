@@ -26,9 +26,9 @@
     "appId": "com.buddy.chat",
     "productName": "Buddy",
     "icon": "build/icon.png",
+    "compression": "maximum",
     "files": [
       "package.json",
-      "server.js",
       "electron-main.js",
       "config.json",
       "public/**/*",
