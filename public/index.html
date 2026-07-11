@@ -21,7 +21,12 @@
     <symbol id="icon-link" viewBox="0 0 24 24"><path d="M9.5 14.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.2 1.2"/><path d="M14.5 9.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.2-1.2"/></symbol>
     <symbol id="icon-close" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></symbol>
     <symbol id="icon-check" viewBox="0 0 24 24"><path d="M4 12.5l5 5 11-11"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></symbol>
+    <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5L5 20"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></symbol>
   </svg>
+
+  <input type="file" id="picInput" accept="image/*" hidden />
 
   <!-- ===== Login ===== -->
   <div id="login" class="login">
@@ -37,8 +42,8 @@
       </label>
       <label class="field">
         <span>Room name</span>
-        <input id="roomInput" type="text" placeholder="e.g. blue-moon-77" maxlength="64" autocomplete="off" />
-        <small class="field-hint">Share this exact room name with your friend.</small>
+        <input id="roomInput" type="text" placeholder="e.g. blue-moon-77" maxlength="80" autocomplete="off" />
+        <small class="field-hint">Share this exact room name with your friend. Leave blank to just use Friends.</small>
       </label>
       <div id="loginError" class="login-error hidden"></div>
       <button id="joinBtn" class="primary-btn">Start chatting</button>
@@ -48,30 +53,31 @@
 
   <!-- ===== App ===== -->
   <div id="app" class="app hidden">
-    <!-- Sidebar / chat list -->
+    <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-head">
         <div class="brand-mark"><svg class="brand-logo"><use href="#icon-chat"/></svg></div>
         <div class="brand-name">Buddy</div>
       </div>
-      <div class="chat-list">
-        <div class="chat-row">
-          <div id="sideRoomAvatar" class="avatar">#</div>
-          <div class="chat-meta">
-            <div class="chat-name">#<span id="sideRoom">room</span></div>
-            <div id="sideSub" class="chat-sub">not connected</div>
-          </div>
-        </div>
+
+      <div class="side-scroll">
+        <div id="friendsList" class="friends"></div>
+        <div class="side-empty" id="friendsEmpty">No friends online yet. Share your room name.</div>
       </div>
+
       <div class="side-actions">
         <button id="inviteBtn" class="side-action">
           <svg class="icon"><use href="#icon-link"/></svg> Invite link
         </button>
       </div>
+
       <div class="me">
-        <div id="meAvatar" class="avatar">?</div>
+        <button id="meAvatarBtn" class="avatar-btn" title="Change photo">
+          <div id="meAvatar" class="avatar">?</div>
+        </button>
         <div class="me-info">
           <div id="meName" class="me-name">—</div>
+          <div id="meBio" class="me-bio"></div>
           <div id="connState" class="conn">connecting</div>
         </div>
       </div>
@@ -81,7 +87,9 @@
     <main class="chat">
       <header class="chat-head">
         <div class="chat-title">
-          <span class="hash">#</span><span id="roomLabel">room</span>
+          <div id="peerAvatar" class="avatar small hidden"></div>
+          <span class="hash" id="titleHash">#</span><span id="roomLabel">room</span>
+          <span id="presence" class="presence"></span>
         </div>
         <div class="chat-actions">
           <button id="callBtn" class="btn call" title="Start a call">
@@ -90,7 +98,7 @@
           <button id="hangupBtn" class="btn hangup hidden" title="End call">
             <svg class="icon"><use href="#icon-phone-off"/></svg><span>End</span>
           </button>
-          <button id="settingsOpen" class="icon-btn" title="Appearance">
+          <button id="settingsOpen" class="icon-btn" title="Appearance & settings">
             <svg class="icon"><use href="#icon-gear"/></svg>
           </button>
         </div>
@@ -99,20 +107,62 @@
       <div id="messages" class="messages"></div>
 
       <footer class="composer">
+        <button id="mediaBtn" class="icon-btn" title="GIFs & stickers">
+          <svg class="icon"><use href="#icon-image"/></svg>
+        </button>
         <input id="msgInput" type="text" placeholder="Message" maxlength="4000" autocomplete="off" />
         <button id="sendBtn" class="btn primary" title="Send">
           <svg class="icon"><use href="#icon-send"/></svg>
         </button>
       </footer>
+
+      <!-- Media picker -->
+      <div id="mediaPanel" class="media-panel hidden">
+        <div class="media-head">
+          <div class="media-tabs">
+            <button id="tabGif" class="active">GIF</button>
+            <button id="tabSticker">Sticker</button>
+          </div>
+          <div class="media-search">
+            <svg class="icon"><use href="#icon-search"/></svg>
+            <input id="mediaSearch" type="text" placeholder="Search Klipy" />
+          </div>
+          <button id="mediaClose" class="icon-btn"><svg class="icon"><use href="#icon-close"/></svg></button>
+        </div>
+        <div id="mediaGrid" class="media-grid"></div>
+        <div id="mediaStatus" class="media-status"></div>
+      </div>
     </main>
 
     <!-- Settings drawer -->
     <aside id="settings" class="settings hidden">
       <div class="settings-head">
-        <span>Appearance</span>
+        <span>Settings</span>
         <button id="settingsClose" class="icon-btn"><svg class="icon"><use href="#icon-close"/></svg></button>
       </div>
       <div class="settings-body">
+        <section class="set-section">
+          <h3>Profile</h3>
+          <div class="profile-edit">
+            <button id="profilePicBtn" class="avatar-btn"><div id="profilePic" class="avatar">?</div></button>
+            <div class="profile-fields">
+              <input id="nameEdit" type="text" maxlength="32" placeholder="Display name" />
+              <textarea id="bioEdit" maxlength="200" rows="2" placeholder="Bio"></textarea>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3>Devices</h3>
+          <label class="field-inline"><span>Microphone</span>
+            <select id="micSelect"><option value="">Default</option></select>
+          </label>
+          <label class="field-inline"><span>Speaker / Headset</span>
+            <select id="speakerSelect"><option value="">Default</option></select>
+          </label>
+          <button id="deviceRefresh" class="reset-btn" style="margin-top:8px">Refresh devices</button>
+        </section>
+
         <section class="set-section">
           <h3>Theme</h3>
           <div class="seg" id="themeSeg">
@@ -146,7 +196,7 @@
           </label>
         </section>
 
-        <button id="resetSettings" class="reset-btn">Reset to defaults</button>
+        <button id="resetSettings" class="reset-btn">Reset appearance</button>
       </div>
     </aside>
 

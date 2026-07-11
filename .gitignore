@@ -5,3 +5,5 @@ npm-debug.log
 dist
 out
 *.log
+
+config.json
