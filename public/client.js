@@ -3,7 +3,6 @@
 
   const $ = (id) => document.getElementById(id);
 
-  // ---- Guard: socket.io must be loaded ----
   if (typeof io === "undefined") {
     const err = $("loginError");
     if (err) {
@@ -13,16 +12,19 @@
     return;
   }
 
-  // Connect to same origin (works for web + Electron shell).
   const socket = io({ transports: ["websocket", "polling"] });
 
-  const AVATAR_COLORS = ["#5865f2", "#23a55a", "#eb459e", "#f0b232", "#e67e22", "#3498db", "#9b59b6", "#1abc9c"];
+  const AVATAR_COLORS = ["#3390ec", "#e15e54", "#ee8a4a", "#bfa54e", "#5fb05f", "#4aa3a8", "#5a8fd6", "#8e6cc0", "#d463a4", "#6d8a96"];
   function colorFor(name) {
     let h = 0;
     for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
     return AVATAR_COLORS[h % AVATAR_COLORS.length];
   }
   function initial(name) { return (name || "?").trim().charAt(0).toUpperCase() || "?"; }
+  function setIcon(btn, id) {
+    const use = btn.querySelector("use");
+    if (use) use.setAttribute("href", "#" + id);
+  }
 
   // ---- State ----
   let myName = "";
@@ -31,7 +33,7 @@
   let localStream = null;
   let peer = null;
   let inCall = false;
-  let pendingOffer = null; // offer received before local stream ready
+  let pendingOffer = null;
 
   const STUN = {
     iceServers: [
@@ -40,7 +42,7 @@
     ],
   };
 
-  // ---- DOM refs ----
+  // ---- DOM ----
   const loginEl = $("login");
   const appEl = $("app");
   const nameInput = $("nameInput");
@@ -49,22 +51,139 @@
   const loginError = $("loginError");
   const messagesEl = $("messages");
   const msgInput = $("msgInput");
-  const memberList = $("memberList");
   const connState = $("connState");
+  const sideSub = $("sideSub");
 
-  // Prefill room from ?room= invite link
   const params = new URLSearchParams(location.search);
   if (params.get("room")) roomInput.value = params.get("room");
 
-  // ---- Connection state UI ----
+  // ---- Settings / customization ----
+  const ACCENTS = ["#3390ec", "#e15e54", "#ee8a4a", "#bfa54e", "#5fb05f", "#4aa3a8", "#5a8fd6", "#8e6cc0", "#d463a4", "#6d8a96"];
+  const BG_PRESETS = [
+    { name: "Classic", value: "var(--bg)" },
+    { name: "Dots", value: "radial-gradient(circle at 1px 1px, rgba(130,130,130,.16) 1px, transparent 0) 0 0/20px 20px, var(--bg)" },
+    { name: "Grid", value: "linear-gradient(rgba(130,130,130,.10) 1px,transparent 1px) 0 0/24px 24px, linear-gradient(90deg,rgba(130,130,128,.10) 1px,transparent 1px) 0 0/24px 24px, var(--bg)" },
+    { name: "Tint", value: "radial-gradient(circle at 25% 15%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg) 72%)" },
+    { name: "Aurora", value: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--bg)), var(--bg) 60%)" },
+    { name: "Smoke", value: "radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg) 65%)" },
+  ];
+  const DEFAULTS = { theme: "dark", accent: "#3390ec", bg: "Classic", radius: 14, fontSize: 15 };
+  const STORE_KEY = "buddy-settings";
+
+  function loadState() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE_KEY));
+      return Object.assign({}, DEFAULTS, s || {});
+    } catch { return Object.assign({}, DEFAULTS); }
+  }
+  const settings = loadState();
+
+  function applySettings(s) {
+    const root = document.documentElement;
+    root.setAttribute("data-theme", s.theme);
+    root.style.setProperty("--accent", s.accent);
+    root.style.setProperty("--bubble-radius", s.radius + "px");
+    root.style.setProperty("--font-size", s.fontSize + "px");
+    const bg = BG_PRESETS.find((b) => b.name === s.bg) || BG_PRESETS[0];
+    root.style.setProperty("--chat-bg", bg.value);
+  }
+
+  function saveSettings() { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); }
+
+  function buildSettingsUI() {
+    // Accent dots
+    const dots = $("accentDots");
+    ACCENTS.forEach((c) => {
+      const b = document.createElement("button");
+      b.className = "dot" + (c.toLowerCase() === settings.accent.toLowerCase() ? " active" : "");
+      b.style.background = c;
+      b.title = c;
+      b.addEventListener("click", () => {
+        settings.accent = c;
+        $("accentCustom").value = c;
+        [...dots.children].forEach((d) => d.classList.remove("active"));
+        b.classList.add("active");
+        applySettings(settings); saveSettings();
+      });
+      dots.appendChild(b);
+    });
+
+    // Background swatches
+    const grid = $("bgGrid");
+    BG_PRESETS.forEach((p) => {
+      const b = document.createElement("button");
+      b.className = "bg-swatch" + (p.name === settings.bg ? " active" : "");
+      b.style.background = p.value;
+      b.title = p.name;
+      b.addEventListener("click", () => {
+        settings.bg = p.name;
+        [...grid.children].forEach((g) => g.classList.remove("active"));
+        b.classList.add("active");
+        applySettings(settings); saveSettings();
+      });
+      grid.appendChild(b);
+    });
+
+    // Theme segmented control
+    [...$("themeSeg").children].forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.theme === settings.theme);
+      btn.addEventListener("click", () => {
+        settings.theme = btn.dataset.theme;
+        [...$("themeSeg").children].forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        applySettings(settings); saveSettings();
+      });
+    });
+
+    // Custom accent
+    $("accentCustom").value = settings.accent;
+    $("accentCustom").addEventListener("input", (e) => {
+      settings.accent = e.target.value;
+      [...dots.children].forEach((d) => d.classList.remove("active"));
+      applySettings(settings); saveSettings();
+    });
+
+    // Sliders
+    $("radiusRange").value = settings.radius;
+    $("radiusVal").textContent = settings.radius + "px";
+    $("radiusRange").addEventListener("input", (e) => {
+      settings.radius = +e.target.value;
+      $("radiusVal").textContent = settings.radius + "px";
+      applySettings(settings); saveSettings();
+    });
+    $("fontRange").value = settings.fontSize;
+    $("fontVal").textContent = settings.fontSize + "px";
+    $("fontRange").addEventListener("input", (e) => {
+      settings.fontSize = +e.target.value;
+      $("fontVal").textContent = settings.fontSize + "px";
+      applySettings(settings); saveSettings();
+    });
+
+    // Reset
+    $("resetSettings").addEventListener("click", () => {
+      Object.assign(settings, DEFAULTS);
+      saveSettings();
+      buildSettingsUI();
+      applySettings(settings);
+    });
+
+    // Drawer open/close
+    $("settingsOpen").addEventListener("click", () => $("settings").classList.remove("hidden"));
+    $("settingsClose").addEventListener("click", () => $("settings").classList.add("hidden"));
+  }
+
+  applySettings(settings);
+  buildSettingsUI();
+
+  // ---- Connection state ----
   function setConn(state) {
     if (!connState) return;
     connState.className = "conn " + (state === "online" ? "online" : state === "offline" ? "offline" : "");
-    connState.textContent = state === "online" ? "online" : state === "offline" ? "disconnected" : "connecting…";
+    connState.textContent = state === "online" ? "online" : state === "offline" ? "offline" : "connecting";
   }
   socket.on("connect", () => {
     setConn("online");
-    if (joined) socket.emit("join", { room: myRoom, user: myName }); // rejoin after reconnect
+    if (joined) socket.emit("join", { room: myRoom, user: myName });
   });
   socket.on("disconnect", () => setConn("offline"));
 
@@ -90,7 +209,10 @@
     $("meAvatar").style.background = colorFor(myName);
     $("roomLabel").textContent = myRoom;
     $("sideRoom").textContent = myRoom;
-    msgInput.placeholder = "Message #" + myRoom + "…";
+    $("sideRoomAvatar").textContent = "#";
+    $("sideRoomAvatar").style.background = colorFor(myRoom);
+    msgInput.placeholder = "Message #" + myRoom;
+    sideSub.textContent = "connected";
 
     socket.emit("join", { room: myRoom, user: myName });
     if (socket.connected) setConn("online");
@@ -148,26 +270,10 @@
   socket.on("history", (msgs) => msgs.forEach((m) => appendMessage(m)));
   socket.on("message", (m) => appendMessage(m));
   socket.on("system", (t) => appendMessage({ system: true, text: t }));
-  socket.on("members", (names) => renderMembers(names));
-
-  function renderMembers(names) {
-    memberList.innerHTML = "";
-    (names || []).forEach((n) => {
-      const row = document.createElement("div");
-      row.className = "member";
-      const av = document.createElement("div");
-      av.className = "avatar";
-      av.textContent = initial(n);
-      av.style.background = colorFor(n);
-      const nm = document.createElement("div");
-      nm.className = "m-name";
-      nm.textContent = n + (n === myName ? " (you)" : "");
-      const dot = document.createElement("div");
-      dot.className = "dot";
-      row.append(av, nm, dot);
-      memberList.appendChild(row);
-    });
-  }
+  socket.on("members", (names) => {
+    const n = (names || []).length;
+    sideSub.textContent = n + (n === 1 ? " member online" : " members online");
+  });
 
   // ---- Invite link ----
   $("inviteBtn").addEventListener("click", async () => {
@@ -175,9 +281,9 @@
     try {
       await navigator.clipboard.writeText(url);
       const btn = $("inviteBtn");
-      const old = btn.textContent;
-      btn.textContent = "✓ Link copied";
-      setTimeout(() => (btn.textContent = old), 1500);
+      const old = btn.innerHTML;
+      btn.textContent = "Link copied";
+      setTimeout(() => (btn.innerHTML = old), 1500);
     } catch {
       prompt("Copy this invite link:", url);
     }
@@ -213,7 +319,7 @@
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (e2) {
-        alert("Camera/microphone blocked. Allow access and try again. (" + e2.message + ")");
+        alert("Camera or microphone blocked. Allow access and try again. (" + e2.message + ")");
         return;
       }
     }
@@ -223,10 +329,7 @@
     $("callBtn").classList.add("hidden");
     $("hangupBtn").classList.remove("hidden");
     setupPeer(asInitiator);
-    if (pendingOffer) {
-      await handleOffer(pendingOffer);
-      pendingOffer = null;
-    }
+    if (pendingOffer) { await handleOffer(pendingOffer); pendingOffer = null; }
   }
 
   async function handleOffer(offer) {
@@ -256,17 +359,15 @@
 
   $("callBtn").addEventListener("click", async () => {
     if (inCall) return;
-    callStatus.textContent = "Ringing… waiting for friend";
+    callStatus.textContent = "Ringing, waiting for friend";
     socket.emit("call:ring");
     await startCall(true);
   });
 
   socket.on("call:ring", async ({ fromName }) => {
     if (inCall) return;
-    callStatus.textContent = fromName + " is calling…";
-    if (confirm(fromName + " is calling you. Accept?")) {
-      await startCall(false);
-    }
+    callStatus.textContent = fromName + " is calling";
+    if (confirm(fromName + " is calling. Accept?")) await startCall(false);
   });
   socket.on("call:offer", ({ offer }) => { if (inCall) handleOffer(offer); else pendingOffer = offer; });
   socket.on("call:answer", async ({ answer }) => {
@@ -282,10 +383,10 @@
   $("endCall").addEventListener("click", endCall);
   $("toggleAudio").addEventListener("click", () => {
     const t = localStream && localStream.getAudioTracks()[0];
-    if (t) { t.enabled = !t.enabled; $("toggleAudio").textContent = t.enabled ? "🎤" : "🔇"; $("toggleAudio").style.background = t.enabled ? "" : "var(--red)"; }
+    if (t) { t.enabled = !t.enabled; setIcon($("toggleAudio"), t.enabled ? "icon-mic" : "icon-mic-off"); $("toggleAudio").style.background = t.enabled ? "" : "#e2575b"; }
   });
   $("toggleVideo").addEventListener("click", () => {
     const t = localStream && localStream.getVideoTracks()[0];
-    if (t) { t.enabled = !t.enabled; $("toggleVideo").textContent = t.enabled ? "📷" : "🚫"; $("toggleVideo").style.background = t.enabled ? "" : "var(--red)"; }
+    if (t) { t.enabled = !t.enabled; setIcon($("toggleVideo"), t.enabled ? "icon-video" : "icon-video-off"); $("toggleVideo").style.background = t.enabled ? "" : "#e2575b"; }
   });
 })();

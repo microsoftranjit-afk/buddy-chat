@@ -12,14 +12,34 @@ A lightweight, self-hostable real-time chat app with **text messaging** and **vo
 ```bash
 cd chat-app
 npm install
-npm start
+npm start          # web server on http://localhost:3000
+npm run electron   # (optional) launch the desktop app
 ```
 
-Open http://localhost:3000 in your browser. Pick a display name and a room name.
-Tell your friend the **same room name** and have them join. Done.
+Open http://localhost:3000 (or the desktop app). Pick a display name and a room
+name. Tell your friend the **same room name** and have them join. Done.
 
 > Camera/mic require a secure context. On `localhost` it works. Over a LAN IP or
 > the internet you must use **HTTPS** (see deployment) or browsers block the camera.
+
+## Desktop app (Electron)
+
+The `npm run electron` command opens a native desktop window that loads the
+deployed server, so you and your friend (on the web) share the same rooms.
+
+- Point it at your server via `config.json` (`serverUrl`) or the
+  `ELECTRON_SERVER_URL` env var. It falls back to the Render URL.
+- To build a Windows installer: `npm run dist` (produces `dist/Buddy Setup.exe`).
+  Requires `electron-builder` (already a dev dependency).
+
+## How the login works (no "stuck" screen)
+
+The join screen is fully client-side. The socket.io client is **vendored**
+(`public/vendor/socket.io.min.js`) so it never depends on the server being warm
+— this fixes the old bug where a cold Render instance returned 404 for the
+library and the join button silently did nothing. Press **Enter** in either
+field or click **Start chatting**; errors show inline.
+
 
 ## Running it for a friend 100km away
 

@@ -1,90 +1,154 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buddy — Chat &amp; Call</title>
+  <title>Buddy</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- ===== Login modal ===== -->
+  <!-- SVG icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="icon-chat" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="icon-phone" viewBox="0 0 24 24"><path d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="icon-phone-off" viewBox="0 0 24 24"><path d="M6.5 3.5h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5.5a2 2 0 0 1 2-2z"/><line x1="3" y1="3" x2="21" y2="21"/></symbol>
+    <symbol id="icon-mic" viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/></symbol>
+    <symbol id="icon-mic-off" viewBox="0 0 24 24"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="3" y1="3" x2="21" y2="21"/></symbol>
+    <symbol id="icon-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></symbol>
+    <symbol id="icon-video-off" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/><line x1="3" y1="3" x2="21" y2="21"/></symbol>
+    <symbol id="icon-send" viewBox="0 0 24 24"><path fill="currentColor" d="M3 11.5l18-8.5-8 18-2.3-7.2L3 11.5z"/></symbol>
+    <symbol id="icon-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2.1M12 19.3v2.1M4.7 4.7l1.5 1.5M17.8 17.8l1.5 1.5M2.6 12h2.1M19.3 12h2.1M4.7 19.3l1.5-1.5M17.8 6.2l1.5-1.5"/></symbol>
+    <symbol id="icon-link" viewBox="0 0 24 24"><path d="M9.5 14.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.2 1.2"/><path d="M14.5 9.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.2-1.2"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="M4 12.5l5 5 11-11"/></symbol>
+  </svg>
+
+  <!-- ===== Login ===== -->
   <div id="login" class="login">
     <div class="login-card">
       <div class="brand">
-        <div class="brand-logo">💬</div>
+        <svg class="brand-logo"><use href="#icon-chat"/></svg>
         <h1>Buddy</h1>
-        <p class="brand-sub">Private chat &amp; calls with a friend</p>
+        <p class="brand-sub">Private chat and calls with a friend</p>
       </div>
-
       <label class="field">
         <span>Your name</span>
         <input id="nameInput" type="text" placeholder="e.g. Alex" maxlength="32" autocomplete="off" />
       </label>
-
       <label class="field">
         <span>Room name</span>
         <input id="roomInput" type="text" placeholder="e.g. blue-moon-77" maxlength="64" autocomplete="off" />
         <small class="field-hint">Share this exact room name with your friend.</small>
       </label>
-
       <div id="loginError" class="login-error hidden"></div>
-
       <button id="joinBtn" class="primary-btn">Start chatting</button>
-      <p class="login-foot">No account needed. Just pick a name and a room.</p>
+      <p class="login-foot">No account needed. Pick a name and a room.</p>
     </div>
   </div>
 
   <!-- ===== App ===== -->
   <div id="app" class="app hidden">
-    <!-- Sidebar -->
+    <!-- Sidebar / chat list -->
     <aside class="sidebar">
       <div class="sidebar-head">
-        <div class="logo">💬</div>
-        <div class="logo-text">Buddy</div>
+        <div class="brand-mark"><svg class="brand-logo"><use href="#icon-chat"/></svg></div>
+        <div class="brand-name">Buddy</div>
       </div>
-
-      <div class="side-section">
-        <div class="side-title">ROOM</div>
-        <div class="room-pill">
-          <span class="hash">#</span>
-          <span id="sideRoom" class="room-name">—</span>
+      <div class="chat-list">
+        <div class="chat-row">
+          <div id="sideRoomAvatar" class="avatar">#</div>
+          <div class="chat-meta">
+            <div class="chat-name">#<span id="sideRoom">room</span></div>
+            <div id="sideSub" class="chat-sub">not connected</div>
+          </div>
         </div>
-        <button id="inviteBtn" class="side-action">🔗 Copy invite link</button>
       </div>
-
-      <div class="side-section grow">
-        <div class="side-title">MEMBERS</div>
-        <div id="memberList" class="member-list"></div>
+      <div class="side-actions">
+        <button id="inviteBtn" class="side-action">
+          <svg class="icon"><use href="#icon-link"/></svg> Invite link
+        </button>
       </div>
-
       <div class="me">
         <div id="meAvatar" class="avatar">?</div>
         <div class="me-info">
           <div id="meName" class="me-name">—</div>
-          <div id="connState" class="conn">connecting…</div>
+          <div id="connState" class="conn">connecting</div>
         </div>
       </div>
     </aside>
 
-    <!-- Chat -->
+    <!-- Conversation -->
     <main class="chat">
       <header class="chat-head">
         <div class="chat-title">
           <span class="hash">#</span><span id="roomLabel">room</span>
         </div>
         <div class="chat-actions">
-          <button id="callBtn" class="btn call" title="Start a call">📞 Call</button>
-          <button id="hangupBtn" class="btn hangup hidden" title="End call">⛔ End</button>
+          <button id="callBtn" class="btn call" title="Start a call">
+            <svg class="icon"><use href="#icon-phone"/></svg><span>Call</span>
+          </button>
+          <button id="hangupBtn" class="btn hangup hidden" title="End call">
+            <svg class="icon"><use href="#icon-phone-off"/></svg><span>End</span>
+          </button>
+          <button id="settingsOpen" class="icon-btn" title="Appearance">
+            <svg class="icon"><use href="#icon-gear"/></svg>
+          </button>
         </div>
       </header>
 
       <div id="messages" class="messages"></div>
 
       <footer class="composer">
-        <input id="msgInput" type="text" placeholder="Message #room…" maxlength="4000" autocomplete="off" />
-        <button id="sendBtn" class="btn primary">Send</button>
+        <input id="msgInput" type="text" placeholder="Message" maxlength="4000" autocomplete="off" />
+        <button id="sendBtn" class="btn primary" title="Send">
+          <svg class="icon"><use href="#icon-send"/></svg>
+        </button>
       </footer>
     </main>
+
+    <!-- Settings drawer -->
+    <aside id="settings" class="settings hidden">
+      <div class="settings-head">
+        <span>Appearance</span>
+        <button id="settingsClose" class="icon-btn"><svg class="icon"><use href="#icon-close"/></svg></button>
+      </div>
+      <div class="settings-body">
+        <section class="set-section">
+          <h3>Theme</h3>
+          <div class="seg" id="themeSeg">
+            <button data-theme="dark" class="active">Dark</button>
+            <button data-theme="light">Light</button>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3>Accent color</h3>
+          <div class="dots" id="accentDots"></div>
+          <label class="custom-color">Custom
+            <input type="color" id="accentCustom" value="#3390ec" />
+          </label>
+        </section>
+
+        <section class="set-section">
+          <h3>Chat background</h3>
+          <div class="bg-grid" id="bgGrid"></div>
+        </section>
+
+        <section class="set-section">
+          <h3>Message style</h3>
+          <label class="slider-row">
+            <span>Bubble roundness</span><span id="radiusVal" class="slider-val">14px</span>
+            <input type="range" id="radiusRange" min="0" max="24" value="14" />
+          </label>
+          <label class="slider-row">
+            <span>Text size</span><span id="fontVal" class="slider-val">15px</span>
+            <input type="range" id="fontRange" min="12" max="20" value="15" />
+          </label>
+        </section>
+
+        <button id="resetSettings" class="reset-btn">Reset to defaults</button>
+      </div>
+    </aside>
 
     <!-- Call overlay -->
     <div id="callOverlay" class="call-overlay hidden">
@@ -92,16 +156,15 @@
         <video id="remoteVideo" autoplay playsinline></video>
         <video id="localVideo" autoplay playsinline muted></video>
       </div>
-      <div id="callStatus" class="call-status">Connecting…</div>
+      <div id="callStatus" class="call-status">Connecting</div>
       <div class="call-controls">
-        <button id="toggleAudio" class="round" title="Mute">🎤</button>
-        <button id="toggleVideo" class="round" title="Camera">📷</button>
-        <button id="endCall" class="round hangup" title="End call">⛔</button>
+        <button id="toggleAudio" class="round" title="Mute"><svg class="icon"><use href="#icon-mic"/></svg></button>
+        <button id="toggleVideo" class="round" title="Camera"><svg class="icon"><use href="#icon-video"/></svg></button>
+        <button id="endCall" class="round hangup" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg></button>
       </div>
     </div>
   </div>
 
-  <!-- Vendored socket.io (no server dependency, fixes cold-start 404s) -->
   <script src="vendor/socket.io.min.js"></script>
   <script src="client.js"></script>
 </body>
