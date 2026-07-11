@@ -24,16 +24,18 @@ name. Tell your friend the **same room name** and have them join. Done.
 
 ## Desktop app (Electron)
 
-The desktop app is **fully self-contained**: it starts the bundled chat server
-inside the app and loads it from `http://127.0.0.1:45900`, so no external server
-is required. Accounts, servers, and uploads are stored under the app's user-data
-folder, so they persist between launches.
+The desktop app connects to your **shared server** by default (the Render URL in
+`config.json` → `serverUrl`, or the `ELECTRON_SERVER_URL` env var, falling back to
+`https://buddy-chat-bd6c.onrender.com`). That means desktop and web users share
+the same accounts, servers, and messages.
 
 - Run in dev: `npm run electron` (needs `npm install` first).
 - To build a Windows installer: `npm run dist` (produces `dist/Buddy Setup.exe`).
   Requires `electron-builder` (already a dev dependency).
-- To point the desktop app at a different server instead of the bundled one, set
-  the `ELECTRON_SERVER_URL` env var before launching.
+- To point the desktop app at a specific server: set `ELECTRON_SERVER_URL` before
+  launching, or edit `serverUrl` in `config.json` (not committed).
+- Optional offline/self-contained mode: set `BUDDY_LOCAL=1` to run the bundled
+  server inside the app (data stored under the app's user-data folder).
 
 ## How the login works (no "stuck" screen)
 
