@@ -3,62 +3,106 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Buddy Chat</title>
+  <title>Buddy — Chat &amp; Call</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Join screen -->
-  <div id="join" class="join-screen">
-    <div class="join-card">
-      <h1>Buddy Chat</h1>
-      <p class="sub">Chat &amp; call with a friend anywhere.</p>
-      <label>Display name
-        <input id="nameInput" type="text" placeholder="e.g. Alex" maxlength="32" />
+  <!-- ===== Login modal ===== -->
+  <div id="login" class="login">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-logo">💬</div>
+        <h1>Buddy</h1>
+        <p class="brand-sub">Private chat &amp; calls with a friend</p>
+      </div>
+
+      <label class="field">
+        <span>Your name</span>
+        <input id="nameInput" type="text" placeholder="e.g. Alex" maxlength="32" autocomplete="off" />
       </label>
-      <label>Room name (share this with your friend)
-        <input id="roomInput" type="text" placeholder="e.g. secret-hangout" maxlength="64" />
+
+      <label class="field">
+        <span>Room name</span>
+        <input id="roomInput" type="text" placeholder="e.g. blue-moon-77" maxlength="64" autocomplete="off" />
+        <small class="field-hint">Share this exact room name with your friend.</small>
       </label>
-      <button id="joinBtn">Enter</button>
-      <p class="hint">Pick any room name and tell your friend the exact same one.</p>
+
+      <div id="loginError" class="login-error hidden"></div>
+
+      <button id="joinBtn" class="primary-btn">Start chatting</button>
+      <p class="login-foot">No account needed. Just pick a name and a room.</p>
     </div>
   </div>
 
-  <!-- Main app -->
+  <!-- ===== App ===== -->
   <div id="app" class="app hidden">
-    <header class="topbar">
-      <div class="room-info">
-        <span class="dot"></span>
-        <span id="roomLabel">room</span>
-        <span class="members" id="membersLabel"></span>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="logo">💬</div>
+        <div class="logo-text">Buddy</div>
       </div>
-      <div class="actions">
-        <button id="callBtn" class="btn call">📞 Call</button>
-        <button id="hangupBtn" class="btn hangup hidden">⛔ Hang up</button>
-        <button id="leaveBtn" class="btn ghost">Leave</button>
+
+      <div class="side-section">
+        <div class="side-title">ROOM</div>
+        <div class="room-pill">
+          <span class="hash">#</span>
+          <span id="sideRoom" class="room-name">—</span>
+        </div>
+        <button id="inviteBtn" class="side-action">🔗 Copy invite link</button>
       </div>
-    </header>
 
-    <main class="messages" id="messages"></main>
+      <div class="side-section grow">
+        <div class="side-title">MEMBERS</div>
+        <div id="memberList" class="member-list"></div>
+      </div>
 
-    <footer class="composer">
-      <input id="msgInput" type="text" placeholder="Type a message…" maxlength="4000" autocomplete="off" />
-      <button id="sendBtn" class="btn primary">Send</button>
-    </footer>
+      <div class="me">
+        <div id="meAvatar" class="avatar">?</div>
+        <div class="me-info">
+          <div id="meName" class="me-name">—</div>
+          <div id="connState" class="conn">connecting…</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Chat -->
+    <main class="chat">
+      <header class="chat-head">
+        <div class="chat-title">
+          <span class="hash">#</span><span id="roomLabel">room</span>
+        </div>
+        <div class="chat-actions">
+          <button id="callBtn" class="btn call" title="Start a call">📞 Call</button>
+          <button id="hangupBtn" class="btn hangup hidden" title="End call">⛔ End</button>
+        </div>
+      </header>
+
+      <div id="messages" class="messages"></div>
+
+      <footer class="composer">
+        <input id="msgInput" type="text" placeholder="Message #room…" maxlength="4000" autocomplete="off" />
+        <button id="sendBtn" class="btn primary">Send</button>
+      </footer>
+    </main>
 
     <!-- Call overlay -->
     <div id="callOverlay" class="call-overlay hidden">
-      <video id="remoteVideo" autoplay playsinline></video>
-      <video id="localVideo" autoplay playsinline muted></video>
-      <div class="call-controls">
-        <button id="toggleAudio" class="btn round">🎤</button>
-        <button id="toggleVideo" class="btn round">📷</button>
-        <button id="endCall" class="btn round hangup">⛔</button>
+      <div class="call-stage">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
       </div>
       <div id="callStatus" class="call-status">Connecting…</div>
+      <div class="call-controls">
+        <button id="toggleAudio" class="round" title="Mute">🎤</button>
+        <button id="toggleVideo" class="round" title="Camera">📷</button>
+        <button id="endCall" class="round hangup" title="End call">⛔</button>
+      </div>
     </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <!-- Vendored socket.io (no server dependency, fixes cold-start 404s) -->
+  <script src="vendor/socket.io.min.js"></script>
   <script src="client.js"></script>
 </body>
 </html>
