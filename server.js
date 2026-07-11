@@ -11,183 +11,150 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
 
-// ---- Config (Klipy key) ----
+// ---- Config ----
 let fileConfig = {};
 try { fileConfig = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")); } catch {}
 const KLIPY_KEY = process.env.KLIPY_API_KEY || fileConfig.klipyKey || "";
 
+// ---- User store (persisted) ----
+const DATA_DIR = path.join(__dirname, "data");
+const USERS_FILE = path.join(DATA_DIR, "users.json");
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+let users = {};
+try { users = JSON.parse(fs.readFileSync(USERS_FILE, "utf8")); } catch {}
+function saveUsers() { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); }
+
+function norm(u) { return String(u || "").trim().toLowerCase(); }
+function validUser(u) { return /^[a-zA-Z0-9_]{3,20}$/.test(u); }
+
+function hashPassword(pw, salt) {
+  salt = salt || crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(pw, salt, 64).toString("hex");
+  return { salt, hash };
+}
+function verifyPassword(pw, salt, hash) {
+  const h = crypto.scryptSync(pw, salt, 64).toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(h, "hex"), Buffer.from(hash, "hex"));
+}
+
+function publicProfile(uname) {
+  const u = users[uname];
+  if (!u) return null;
+  return { username: u.username, displayName: u.displayName, pic: u.pic || "", bio: u.bio || "" };
+}
+function friendView(uname) {
+  const p = publicProfile(uname);
+  if (!p) return null;
+  p.online = online.has(uname);
+  return p;
+}
+
+// ---- Sessions (in-memory) ----
+const sessions = new Map(); // token -> usernameLower
+function newSession(uname) { const t = crypto.randomBytes(24).toString("hex"); sessions.set(t, uname); return t; }
+
+// online usernames
+const online = new Set();
+
+// ---- HTTP API ----
+app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/healthz", (req, res) => res.json({ ok: true }));
 
-// ---- In-memory state ----
-// rooms: Map<roomName, { messages: [], members: Set<socketId> }>
-const rooms = new Map();
-// socketMeta: Map<socketId, { room, user, pic, bio }>
-const socketMeta = new Map();
-// nameIndex: name -> socketId (last writer wins; for DM invites)
-const nameIndex = new Map();
-
-function getRoom(name) {
-  if (!rooms.has(name)) rooms.set(name, { messages: [], members: new Set() });
-  return rooms.get(name);
+function authToken(req) {
+  const h = req.headers["authorization"] || "";
+  const t = h.startsWith("Bearer ") ? h.slice(7) : (req.body && req.body.token);
+  return t;
 }
-function profileOf(id) {
-  const m = socketMeta.get(id);
-  if (!m) return null;
-  return { name: m.user, pic: m.pic || "", bio: m.bio || "" };
-}
-function roomRoster(roomName) {
-  const r = getRoom(roomName);
-  return [...r.members].map(profileOf).filter(Boolean);
-}
-function directory() {
-  return [...socketMeta.values()].map((m) => ({ name: m.user, pic: m.pic || "", bio: m.bio || "" }));
-}
+function userFromToken(t) { return t ? sessions.get(t) : null; }
 
-function broadcastDirectory() {
-  io.emit("directory", directory());
-}
-
-io.on("connection", (socket) => {
-  let joinedRoom = null;
-
-  socket.on("join", ({ room, user, pic, bio }) => {
-    if (!room || !user) return;
-    joinedRoom = String(room).slice(0, 80);
-    socketMeta.set(socket.id, {
-      room: joinedRoom,
-      user: String(user).slice(0, 32),
-      pic: typeof pic === "string" ? pic.slice(0, 200000) : "",
-      bio: typeof bio === "string" ? bio.slice(0, 200) : "",
-    });
-    nameIndex.set(socketMeta.get(socket.id).user, socket.id);
-
-    socket.join(joinedRoom);
-    const r = getRoom(joinedRoom);
-    r.members.add(socket.id);
-
-    socket.emit("history", r.messages.slice(-100));
-    socket.to(joinedRoom).emit("system", `${socketMeta.get(socket.id).user} joined`);
-    io.to(joinedRoom).emit("roster", roomRoster(joinedRoom));
-    broadcastDirectory();
-  });
-
-  socket.on("profile", ({ pic, bio, name }) => {
-    const m = socketMeta.get(socket.id);
-    if (!m) return;
-    const oldName = m.user;
-    if (typeof pic === "string") m.pic = pic.slice(0, 200000);
-    if (typeof bio === "string") m.bio = bio.slice(0, 200);
-    if (typeof name === "string" && name.trim()) m.user = name.trim().slice(0, 32);
-    if (oldName !== m.user && nameIndex.get(oldName) === socket.id) nameIndex.delete(oldName);
-    nameIndex.set(m.user, socket.id);
-    if (m.room) io.to(m.room).emit("roster", roomRoster(m.room));
-    broadcastDirectory();
-  });
-
-  socket.on("dm-invite", ({ to, room }) => {
-    const id = nameIndex.get(to);
-    if (id && id !== socket.id) {
-      io.to(id).emit("dm-invite", { room, from: socketMeta.get(socket.id).user });
-    }
-  });
-
-  socket.on("leave", () => {
-    const m = socketMeta.get(socket.id);
-    if (!m || !m.room) return;
-    const r = getRoom(m.room);
-    r.members.delete(socket.id);
-    socket.to(m.room).emit("system", `${m.user} left`);
-    io.to(m.room).emit("roster", roomRoster(m.room));
-    m.room = null;
-    joinedRoom = null;
-  });
-
-  socket.on("message", (text) => {
-    const m = socketMeta.get(socket.id);
-    if (!m || !m.room) return;
-    const msg = {
-      id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"),
-      user: m.user,
-      text: String(text).slice(0, 4000),
-      ts: Date.now(),
-    };
-    const r = getRoom(m.room);
-    r.messages.push(msg);
-    if (r.messages.length > 500) r.messages.shift();
-    io.to(m.room).emit("message", msg);
-  });
-
-  socket.on("media", ({ url, kind }) => {
-    const m = socketMeta.get(socket.id);
-    if (!m || !m.room) return;
-    if (typeof url !== "string" || !/^https?:\/\//.test(url)) return;
-    const msg = {
-      id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"),
-      user: m.user,
-      kind: kind === "sticker" ? "sticker" : "gif",
-      url: url.slice(0, 2000),
-      ts: Date.now(),
-    };
-    const r = getRoom(m.room);
-    r.messages.push(msg);
-    if (r.messages.length > 500) r.messages.shift();
-    io.to(m.room).emit("message", msg);
-  });
-
-  socket.on("delete", ({ id }) => {
-    const m = socketMeta.get(socket.id);
-    if (!m || !m.room) return;
-    const r = getRoom(m.room);
-    const idx = r.messages.findIndex((x) => x.id === id);
-    if (idx === -1) return;
-    // only allow deleting your own messages
-    if (r.messages[idx].user !== m.user) return;
-    r.messages.splice(idx, 1);
-    io.to(m.room).emit("deleted", { id });
-  });
-
-  // ---- WebRTC signaling (relayed to the rest of the room) ----
-  socket.on("call:ring", () => {
-    const m = socketMeta.get(socket.id);
-    if (m) socket.to(m.room).emit("call:ring", { fromName: m.user });
-  });
-  socket.on("call:offer", (offer) => {
-    const m = socketMeta.get(socket.id);
-    if (m) socket.to(m.room).emit("call:offer", { from: socket.id, offer });
-  });
-  socket.on("call:answer", (answer) => {
-    const m = socketMeta.get(socket.id);
-    if (m) socket.to(m.room).emit("call:answer", { from: socket.id, answer });
-  });
-  socket.on("call:ice", (candidate) => {
-    const m = socketMeta.get(socket.id);
-    if (m) socket.to(m.room).emit("call:ice", { from: socket.id, candidate });
-  });
-  socket.on("call:end", () => {
-    const m = socketMeta.get(socket.id);
-    if (m) socket.to(m.room).emit("call:end");
-  });
-
-  socket.on("disconnect", () => {
-    const m = socketMeta.get(socket.id);
-    if (m) {
-      if (m.room) {
-        const r = getRoom(m.room);
-        r.members.delete(socket.id);
-        socket.to(m.room).emit("system", `${m.user} left`);
-        io.to(m.room).emit("roster", roomRoster(m.room));
-      }
-      socketMeta.delete(socket.id);
-      if (nameIndex.get(m.user) === socket.id) nameIndex.delete(m.user);
-      broadcastDirectory();
-    }
-  });
+app.post("/api/signup", (req, res) => {
+  const { username, password, displayName } = req.body || {};
+  if (!validUser(username)) return res.status(400).json({ error: "Username must be 3-20 chars (letters, numbers, _)." });
+  if (!password || password.length < 4) return res.status(400).json({ error: "Password must be at least 4 characters." });
+  const uname = norm(username);
+  if (users[uname]) return res.status(409).json({ error: "That username is taken." });
+  const { salt, hash } = hashPassword(password);
+  users[uname] = {
+    username, displayName: (displayName && displayName.trim()) || username,
+    salt, hash, pic: "", bio: "", friends: [],
+  };
+  saveUsers();
+  const token = newSession(uname);
+  res.json({ ok: true, token, profile: publicProfile(uname) });
 });
 
-// ---- Klipy proxy (key stays server-side) ----
+app.post("/api/login", (req, res) => {
+  const { username, password } = req.body || {};
+  const uname = norm(username);
+  const u = users[uname];
+  if (!u || !verifyPassword(password || "", u.salt, u.hash)) return res.status(401).json({ error: "Wrong username or password." });
+  const token = newSession(uname);
+  res.json({ ok: true, token, profile: publicProfile(uname) });
+});
+
+function requireUser(req, res) {
+  const uname = userFromToken(authToken(req));
+  if (!uname || !users[uname]) { res.status(401).json({ error: "Not authenticated." }); return null; }
+  return uname;
+}
+
+app.get("/api/me", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  res.json({ profile: publicProfile(uname), friends: (users[uname].friends || []).map(friendView).filter(Boolean) });
+});
+
+app.post("/api/profile", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const u = users[uname];
+  const { displayName, pic, bio, oldPassword, newPassword } = req.body || {};
+  if (typeof displayName === "string" && displayName.trim()) u.displayName = displayName.trim().slice(0, 32);
+  if (typeof pic === "string") u.pic = pic.slice(0, 200000);
+  if (typeof bio === "string") u.bio = bio.slice(0, 200);
+  if (newPassword) {
+    if (!oldPassword || !verifyPassword(oldPassword, u.salt, u.hash)) return res.status(400).json({ error: "Current password is incorrect." });
+    if (newPassword.length < 4) return res.status(400).json({ error: "New password too short." });
+    const h = hashPassword(newPassword); u.salt = h.salt; u.hash = h.hash;
+  }
+  saveUsers();
+  emitFriendsTo(uname);
+  res.json({ ok: true, profile: publicProfile(uname) });
+});
+
+app.post("/api/friends/add", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const friend = norm(req.body && req.body.friend);
+  if (!validUser(friend)) return res.status(400).json({ error: "Invalid username." });
+  if (friend === uname) return res.status(400).json({ error: "You can't add yourself." });
+  if (!users[friend]) return res.status(404).json({ error: "No user with that username." });
+  const me = users[uname], them = users[friend];
+  if (!me.friends.includes(friend)) me.friends.push(friend);
+  if (!them.friends.includes(uname)) them.friends.push(uname);
+  saveUsers();
+  emitFriendsTo(uname); emitFriendsTo(friend);
+  res.json({ ok: true, friends: me.friends.map(friendView).filter(Boolean) });
+});
+
+app.post("/api/friends/remove", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const friend = norm(req.body && req.body.friend);
+  const me = users[uname], them = users[friend];
+  if (me) me.friends = (me.friends || []).filter((f) => f !== friend);
+  if (them) them.friends = (them.friends || []).filter((f) => f !== uname);
+  saveUsers();
+  emitFriendsTo(uname); emitFriendsTo(friend);
+  res.json({ ok: true });
+});
+
+function emitFriendsTo(uname) {
+  if (!users[uname]) return;
+  const list = (users[uname].friends || []).map(friendView).filter(Boolean);
+  io.to("user:" + uname).emit("friends", list);
+}
+
+// ---- Klipy proxy ----
 async function klipy(req, res, type, endpoint) {
-  if (!KLIPY_KEY) return res.status(503).json({ error: "no_key", message: "Add your Klipy API key to config.json (klipyKey) or set KLIPY_API_KEY." });
+  if (!KLIPY_KEY) return res.status(503).json({ error: "no_key", message: "Set KLIPY_API_KEY on the server." });
   try {
     const cid = crypto.randomUUID();
     const url = new URL(`https://api.klipy.com/api/v1/${KLIPY_KEY}/${type}/${endpoint}`);
@@ -195,19 +162,95 @@ async function klipy(req, res, type, endpoint) {
     url.searchParams.set("per_page", String(Math.min(40, Math.max(1, parseInt(req.query.per_page) || 24))));
     url.searchParams.set("page", String(Math.max(1, parseInt(req.query.page) || 1)));
     if (req.query.q) url.searchParams.set("q", String(req.query.q).slice(0, 80));
-    if (req.query.locale) url.searchParams.set("locale", String(req.query.locale).slice(0, 8));
     const r = await fetch(url, { headers: { Accept: "application/json" } });
     const data = await r.json().catch(() => ({}));
     res.json(data);
-  } catch (e) {
-    res.status(502).json({ error: "proxy_failed", message: String(e.message || e) });
-  }
+  } catch (e) { res.status(502).json({ error: "proxy_failed", message: String(e.message || e) }); }
 }
 app.get("/api/gifs/trending", (req, res) => klipy(req, res, "gifs", "trending"));
 app.get("/api/gifs/search", (req, res) => klipy(req, res, "gifs", "search"));
 app.get("/api/stickers/trending", (req, res) => klipy(req, res, "stickers", "trending"));
 app.get("/api/stickers/search", (req, res) => klipy(req, res, "stickers", "search"));
 
-server.listen(PORT, () => {
-  console.log(`Buddy-chat running on http://localhost:${PORT}`);
+// ---- Socket (DMs) ----
+const dmRoom = (a, b) => "dm:" + [a, b].sort().join("|");
+// per-room message history (in-memory)
+const history = new Map(); // room -> [msg]
+function roomMsgs(room) { if (!history.has(room)) history.set(room, []); return history.get(room); }
+
+io.on("connection", (socket) => {
+  socket.user = null;
+  socket.activeRoom = null;
+
+  socket.on("auth", ({ token }) => {
+    const u = userFromToken(token);
+    if (!u || !users[u]) { socket.emit("auth-error", "Session expired. Please log in again."); return; }
+    socket.user = u;
+    online.add(u);
+    socket.join("user:" + u);
+    socket.emit("authed", { profile: publicProfile(u) });
+    emitFriendsTo(u);
+    // notify friends of presence
+    (users[u].friends || []).forEach((f) => emitFriendsTo(f));
+  });
+
+  function ensureAuth() { return !!socket.user; }
+
+  socket.on("dm-open", ({ friend }) => {
+    if (!ensureAuth()) return;
+    const f = norm(friend);
+    if (!users[socket.user].friends.includes(f)) return;
+    if (socket.activeRoom) socket.leave(socket.activeRoom);
+    const room = dmRoom(socket.user, f);
+    socket.activeRoom = room;
+    socket.join(room);
+    socket.emit("history", roomMsgs(room).slice(-100));
+    socket.emit("dm-roster", [publicProfile(socket.user), publicProfile(f)].filter(Boolean));
+  });
+
+  socket.on("dm-invite", ({ friend }) => {
+    if (!ensureAuth()) return;
+    const f = norm(friend);
+    if (users[socket.user].friends.includes(f)) io.to("user:" + f).emit("dm-invite", { from: users[socket.user].username });
+  });
+
+  socket.on("message", (text) => {
+    if (!ensureAuth() || !socket.activeRoom) return;
+    const msg = { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, text: String(text).slice(0, 4000), ts: Date.now() };
+    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
+    io.to(socket.activeRoom).emit("message", msg);
+  });
+
+  socket.on("media", ({ url, kind }) => {
+    if (!ensureAuth() || !socket.activeRoom) return;
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) return;
+    const msg = { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: kind === "sticker" ? "sticker" : "gif", url: url.slice(0, 2000), ts: Date.now() };
+    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
+    io.to(socket.activeRoom).emit("message", msg);
+  });
+
+  socket.on("delete", ({ id }) => {
+    if (!ensureAuth() || !socket.activeRoom) return;
+    const arr = roomMsgs(socket.activeRoom);
+    const i = arr.findIndex((x) => x.id === id);
+    if (i === -1 || arr[i].user !== users[socket.user].username) return;
+    arr.splice(i, 1);
+    io.to(socket.activeRoom).emit("deleted", { id });
+  });
+
+  // calls relayed to the active DM room
+  socket.on("call:ring", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ring", { fromName: users[socket.user].displayName }); });
+  socket.on("call:offer", (offer) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:offer", { from: socket.id, offer }); });
+  socket.on("call:answer", (answer) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:answer", { from: socket.id, answer }); });
+  socket.on("call:ice", (candidate) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ice", { from: socket.id, candidate }); });
+  socket.on("call:end", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:end"); });
+
+  socket.on("disconnect", () => {
+    if (socket.user) {
+      online.delete(socket.user);
+      (users[socket.user].friends || []).forEach((f) => emitFriendsTo(f));
+    }
+  });
 });
+
+server.listen(PORT, () => console.log(`Buddy-chat running on http://localhost:${PORT}`));

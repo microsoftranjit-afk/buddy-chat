@@ -102,7 +102,7 @@ html, body {
 
 .avatar-btn { border: none; background: none; padding: 0; cursor: pointer; border-radius: 50%; line-height: 0; }
 .avatar {
-  width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto;
+  width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto; position: relative;
   display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700;
   background: var(--accent); text-transform: uppercase; font-size: 16px; overflow: hidden;
 }
@@ -120,9 +120,11 @@ html, body {
 /* Chat */
 .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); overflow: hidden; position: relative; }
 .chat-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--header); }
-.chat-title { font-weight: 800; font-size: 17px; color: var(--text); display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chat-title { font-weight: 800; font-size: 17px; color: var(--text); display: flex; align-items: center; gap: 10px; min-width: 0; }
 .chat-title .avatar.small { margin-right: 2px; }
-.presence { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 4px; align-self: center; }
+.title-text { display: flex; flex-direction: column; min-width: 0; }
+.title-name { font-weight: 800; font-size: 17px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.presence { font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-actions { display: flex; align-items: center; gap: 8px; }
 
 .btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: none; border-radius: 9px; cursor: pointer; font-weight: 700; font-size: 14px; color: #fff; background: var(--accent); }
@@ -239,3 +241,27 @@ html, body {
 /* Scrollbars */
 .messages::-webkit-scrollbar, .side-scroll::-webkit-scrollbar, .settings-body::-webkit-scrollbar, .media-grid::-webkit-scrollbar { width: 8px; }
 .messages::-webkit-scrollbar-thumb, .side-scroll::-webkit-scrollbar-thumb, .settings-body::-webkit-scrollbar-thumb, .media-grid::-webkit-scrollbar-thumb { background: rgba(128,128,128,.3); border-radius: 8px; }
+
+/* ===== Auth (login / signup) ===== */
+.auth { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 30% 20%, var(--bg-2), var(--bg-3)); padding: 20px; }
+.auth-card { width: 380px; max-width: 100%; background: var(--bg-2); border-radius: 16px; padding: 32px 28px; box-shadow: var(--shadow); }
+.auth-tabs { display: flex; gap: 6px; margin-bottom: 18px; background: var(--bg-3); border-radius: 10px; padding: 4px; }
+.auth-tabs button { flex: 1; padding: 9px; border: none; border-radius: 7px; background: transparent; color: var(--text-2); font-weight: 700; cursor: pointer; font-size: 14px; }
+.auth-tabs button.active { background: var(--accent); color: #fff; }
+.auth-error { background: rgba(242,63,67,.12); color: #ff9b9d; border: 1px solid rgba(242,63,67,.3); padding: 9px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+.auth-foot { text-align: center; color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+
+/* ===== Add friend + friends list ===== */
+.add-friend { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.add-friend input { flex: 1; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 13px; outline: none; min-width: 0; }
+.add-friend input:focus { border-color: var(--accent); }
+.friend-msg { padding: 0 14px 8px; font-size: 12px; }
+.friend-msg.ok { color: #2faa57; }
+.friend-msg.err { color: #e2575b; }
+.friend-user { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ondot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #5b6b78; border: 2px solid var(--bg-2); }
+.ondot.on { background: #2faa57; }
+.pw-box { margin-top: 12px; }
+.pw-box summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+.pw-box input { width: 100%; margin-top: 8px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 13px; outline: none; font-family: inherit; }
+.me-user { font-size: 11px; color: var(--muted); }
