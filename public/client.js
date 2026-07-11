@@ -21,6 +21,36 @@
   function setProfile(p) { if (!p || !p.username) return; profiles.set(p.username, Object.assign({}, profiles.get(p.username), p)); }
   function nameOf(u) { const p = profiles.get(u); return (p && p.displayName) || u; }
 
+  const PRESENCE_LABEL = { online: "Online", idle: "Idle", dnd: "Do Not Disturb", offline: "Offline" };
+  function presenceDotClass(status) { return status === "online" ? "online" : status === "idle" ? "idle" : status === "dnd" ? "dnd" : "offline"; }
+  function activityText(a) {
+    const verb = { playing: "Playing", listening: "Listening to", watching: "Watching", competing: "Competing in", custom: "" }[a.type] || "";
+    return (verb ? verb + " " : "") + a.name;
+  }
+  function relTime(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 45) return "just now";
+    const m = Math.floor(s / 60); if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60); if (h < 24) return h + "h ago";
+    const d = Math.floor(h / 24); return d + "d ago";
+  }
+  function buildSub(p) {
+    if (p.activity && p.activity.name) return '<svg class="icon act-ico"><use href="#icon-activity"/></svg>' + escapeHtml(activityText(p.activity));
+    if (p.status) return escapeHtml(p.status);
+    if (p.bio) return escapeHtml(p.bio);
+    if (!p.online && p.lastSeen) return '<span class="last-seen">Last seen ' + escapeHtml(relTime(p.lastSeen)) + '</span>';
+    return '<span class="muted">@' + escapeHtml(p.username) + '</span>';
+  }
+  function makeDot(status) { const d = document.createElement("span"); d.className = "ondot " + presenceDotClass(status); return d; }
+  function headerPresence(p) {
+    if (!p) return "Offline";
+    if (p.online) { if (p.activity && p.activity.name) return activityText(p.activity); if (p.status) return p.status; return PRESENCE_LABEL[p.presence] || "Online"; }
+    if (p.lastSeen) return "Last seen " + relTime(p.lastSeen);
+    return "Offline";
+  }
+  function dmRoomKey(a, b) { return "dm:" + [a, b].sort().join("|"); }
+  function unreadFor(key) { const n = unreadMap[key]; return n ? n : 0; }
+
   // State
   const state = { friends: [], requests: { incoming: [], outgoing: [] }, servers: [] };
   let view = "dm"; // "dm" | "server"
@@ -33,6 +63,9 @@
   let myUser = localStorage.getItem("buddy-user") || "";
   let myName = localStorage.getItem("buddy-name") || "";
   let myPic = localStorage.getItem("buddy-pic") || "";
+  let myPresence = "online", myStatus = "", myActivity = null;
+  let unreadMap = {};
+  let typingName = null, typingTimer = null;
   function persistAuth() { localStorage.setItem("buddy-token", token); localStorage.setItem("buddy-user", myUser); localStorage.setItem("buddy-name", myName); localStorage.setItem("buddy-pic", myPic); }
   function clearAuth() { token = ""; myUser = ""; myName = ""; myPic = ""; ["buddy-token", "buddy-user", "buddy-name", "buddy-pic"].forEach((k) => localStorage.removeItem(k)); }
 
@@ -151,13 +184,23 @@
   }
   function renderMyIdentity(p) {
     myName = p.displayName; myPic = p.pic || "";
+    myPresence = p.presence || "online"; myStatus = p.status || ""; myActivity = p.activity || null;
     $("meName").textContent = myName;
-    $("meUser").textContent = "@" + myUser;
     renderMyAvatar();
     $("nameEdit").value = myName;
     $("userEdit").value = "@" + myUser;
     $("bioEdit").value = p.bio || "";
     renderProfilePic();
+    renderMyStatus();
+  }
+  function renderMyStatus() {
+    const dot = $("meStatusDot"), txt = $("meStatusText");
+    if (!dot || !txt) return;
+    dot.className = "ondot " + presenceDotClass(myPresence);
+    let label = PRESENCE_LABEL[myPresence] || "Online";
+    if (myActivity && myActivity.name) label = activityText(myActivity);
+    else if (myStatus) label = myStatus;
+    txt.textContent = label;
   }
   function renderMyAvatar() { const a = $("meAvatar"); a.innerHTML = ""; if (myPic) { const i = document.createElement("img"); i.src = myPic; a.appendChild(i); } else { a.textContent = initial(myName); a.style.background = colorFor(myName); } }
   function renderProfilePic() { const a = $("profilePic"); a.innerHTML = ""; if (myPic) { const i = document.createElement("img"); i.src = myPic; a.appendChild(i); } else { a.textContent = initial(myName); a.style.background = colorFor(myName); } }
@@ -204,6 +247,15 @@
   });
   socket.on("dm-roster", (list) => list.forEach(setProfile));
 
+  socket.on("unread", (obj) => { unreadMap = obj || {}; if (view === "dm") renderFriendsDom(); else renderServerView(); renderRail(); });
+  socket.on("typing", ({ from, user, on }) => {
+    const inDm = view === "dm" && activePeer && user === activePeer.username;
+    const inChan = view === "server" && activeChannel && activeServer && (() => { const s = state.servers.find((x) => x.id === activeServer); return s && (s.members || []).includes(user); })();
+    if (!inDm && !inChan) return;
+    if (on) { typingName = from; clearTimeout(typingTimer); typingTimer = setTimeout(() => { typingName = null; updateHeader(); }, 4000); updateHeader(); }
+    else if (typingName === from) { typingName = null; updateHeader(); }
+  });
+
   // ====================================================================
   //  RAIL (servers)
   // ====================================================================
@@ -215,6 +267,8 @@
       b.style.background = s.iconColor || colorFor(s.name);
       b.textContent = (s.name || "?").trim().charAt(0).toUpperCase();
       b.title = s.name;
+      const total = (s.channels || []).reduce((a, c) => a + unreadFor("chan:" + c.id), 0);
+      if (total > 0) { const bd = document.createElement("span"); bd.className = "rail-badge"; bd.textContent = total > 99 ? "99+" : total; b.appendChild(bd); }
       b.onclick = () => selectServer(s.id);
       list.appendChild(b);
     });
@@ -263,12 +317,13 @@
       setProfile(p);
       const row = document.createElement("div"); row.className = "friend" + (activePeer && p.username === activePeer.username ? " active" : "");
       const av = avatarEl(p.displayName, p.pic);
-      const dot = document.createElement("span"); dot.className = "ondot" + (p.online ? " on" : "");
-      av.appendChild(dot);
+      av.appendChild(makeDot(p.presence));
       const meta = document.createElement("div"); meta.className = "friend-meta";
       const nm = document.createElement("div"); nm.className = "friend-name"; nm.textContent = p.displayName;
-      const un = document.createElement("div"); un.className = "friend-bio"; un.textContent = p.bio ? p.bio : "@" + p.username;
+      const un = document.createElement("div"); un.className = "friend-bio"; un.innerHTML = buildSub(p);
       meta.append(nm, un); row.append(av, meta);
+      const n = unreadFor(dmRoomKey(myUser, p.username));
+      if (n > 0) { const b = document.createElement("span"); b.className = "badge"; b.textContent = n > 99 ? "99+" : n; row.appendChild(b); }
       row.addEventListener("click", () => openDM(p.username));
       fl.appendChild(row);
     });
@@ -319,6 +374,8 @@
       const row = document.createElement("div");
       row.className = "channel" + (c.id === activeChannel ? " active" : "");
       row.innerHTML = '<svg class="icon chan-icon"><use href="#icon-hash"/></svg><span>' + escapeHtml(c.name) + '</span>';
+      const n = unreadFor("chan:" + c.id);
+      if (n > 0) { const b = document.createElement("span"); b.className = "badge channel-badge"; b.textContent = n > 99 ? "99+" : n; row.appendChild(b); }
       row.onclick = () => openChannel(c.id);
       cl.appendChild(row);
     });
@@ -328,9 +385,11 @@
     members.forEach((m) => {
       const row = document.createElement("div"); row.className = "member";
       const av = avatarEl(m.displayName, m.pic, "small");
-      const dot = document.createElement("span"); dot.className = "ondot" + (m.online ? " on" : ""); av.appendChild(dot);
+      av.appendChild(makeDot(m.presence));
+      const meta = document.createElement("div"); meta.className = "member-meta";
       const nm = document.createElement("div"); nm.className = "member-name"; nm.textContent = (m.username === myUser ? m.displayName + " (you)" : m.displayName);
-      row.append(av, nm); ml.appendChild(row);
+      const sub = document.createElement("div"); sub.className = "member-sub"; sub.innerHTML = buildSub(m);
+      meta.append(nm, sub); row.append(av, meta); ml.appendChild(row);
     });
     $("memberCount").textContent = (s.members || []).length;
   }
@@ -367,23 +426,27 @@
 
   function updateHeader() {
     const peerAvatar = $("peerAvatar"), roomLabel = $("roomLabel"), presence = $("presence");
+    presence.classList.remove("online", "idle", "dnd");
     if (view === "dm" && activePeer) {
       peerAvatar.classList.remove("hidden"); peerAvatar.innerHTML = ""; peerAvatar.appendChild(avatarEl(activePeer.displayName, activePeer.pic, ""));
       roomLabel.textContent = activePeer.displayName;
-      const on = (profiles.get(activePeer.username) || {}).online;
-      presence.textContent = (activePeer.bio ? activePeer.bio + "  ·  " : "") + "@" + activePeer.username;
-      presence.classList.toggle("online", !!on);
+      if (typingName) {
+        presence.textContent = typingName + " is typing…";
+      } else {
+        const p = profiles.get(activePeer.username) || activePeer;
+        presence.textContent = headerPresence(p);
+        presence.classList.add(presenceDotClass(p.presence));
+      }
       $("callBtn").classList.remove("hidden");
     } else if (view === "server" && activeServer) {
       const s = state.servers.find((x) => x.id === activeServer);
       const ch = s && s.channels.find((c) => c.id === activeChannel);
       peerAvatar.classList.add("hidden");
       roomLabel.textContent = ch ? "# " + ch.name : "Server";
-      presence.textContent = s ? s.name : "";
-      presence.classList.remove("online");
+      presence.textContent = typingName ? typingName + " is typing…" : (s ? s.name : "");
       $("callBtn").classList.add("hidden");
     } else {
-      peerAvatar.classList.add("hidden"); roomLabel.textContent = "Buddy"; presence.textContent = "Select a friend or server to start"; presence.classList.remove("online"); $("callBtn").classList.add("hidden");
+      peerAvatar.classList.add("hidden"); roomLabel.textContent = "Buddy"; presence.textContent = "Select a friend or server to start"; $("callBtn").classList.add("hidden");
     }
   }
   function updateComposer() {
@@ -463,6 +526,35 @@
     if (!res.ok) return flash(res.error || "Password not updated.");
     $("oldPass").value = ""; $("newPass").value = ""; flash("Password updated.");
   };
+
+  // ---- Rich presence / status menu ----
+  let smPresence = "online";
+  function openStatusMenu() {
+    const m = $("statusMenu"); m.classList.remove("hidden");
+    smPresence = myPresence;
+    [...$("smPresences").children].forEach((b) => b.classList.toggle("active", b.dataset.p === smPresence));
+    $("statusText").value = myStatus || "";
+    const act = myActivity || null;
+    $("activityType").value = act ? act.type : "";
+    $("activityName").value = act ? act.name : "";
+    $("activityName").disabled = !act;
+  }
+  function closeStatusMenu() { $("statusMenu").classList.add("hidden"); }
+  $("meStatusBtn").addEventListener("click", (e) => { e.stopPropagation(); const m = $("statusMenu"); if (m.classList.contains("hidden")) openStatusMenu(); else closeStatusMenu(); });
+  document.addEventListener("click", (e) => {
+    const m = $("statusMenu");
+    if (m && !m.classList.contains("hidden") && !m.contains(e.target) && e.target !== $("meStatusBtn") && !$("meStatusBtn").contains(e.target)) closeStatusMenu();
+  });
+  [...$("smPresences").children].forEach((b) => { b.addEventListener("click", () => { smPresence = b.dataset.p; [...$("smPresences").children].forEach((x) => x.classList.remove("active")); b.classList.add("active"); }); });
+  $("activityType").addEventListener("change", (e) => { $("activityName").disabled = !e.target.value; if (e.target.value) $("activityName").focus(); });
+  $("statusSave").addEventListener("click", async () => {
+    const type = $("activityType").value;
+    const name = $("activityName").value.trim();
+    const activity = type ? { type, name } : null;
+    const res = await api("/api/presence", { presence: smPresence, status: $("statusText").value.trim(), activity }, true);
+    if (res && res.ok && res.profile) { myPresence = res.profile.presence; myStatus = res.profile.status; myActivity = res.profile.activity; renderMyStatus(); }
+    closeStatusMenu();
+  });
 
   // ====================================================================
   //  MEDIA PICKER (Klipy)
@@ -682,5 +774,5 @@
   // ====================================================================
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   if (token) { authEl.classList.add("hidden"); appEl.classList.remove("hidden"); loadMe(); renderMyIdentityPlaceholder(); }
-  function renderMyIdentityPlaceholder() { $("meUser").textContent = "@" + myUser; $("meName").textContent = myName; renderMyAvatar(); $("nameEdit").value = myName; $("userEdit").value = "@" + myUser; }
+  function renderMyIdentityPlaceholder() { $("meName").textContent = myName; renderMyAvatar(); $("nameEdit").value = myName; $("userEdit").value = "@" + myUser; renderMyStatus(); }
 })();

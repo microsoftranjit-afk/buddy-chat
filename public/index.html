@@ -31,6 +31,7 @@
     <symbol id="icon-play" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></symbol>
     <symbol id="icon-hash" viewBox="0 0 24 24"><path d="M10 3L8 21M16 3l-2 18M4 8h16M3 16h16"/></symbol>
     <symbol id="icon-user-plus" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0M18 8v6M21 11h-6"/></symbol>
+  <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h3.5l2-7 4 14 3-9 2 4H21"/></symbol>
   </svg>
 
   <input type="file" id="picInput" accept="image/*" hidden />
@@ -115,7 +116,31 @@
         <button id="meAvatarBtn" class="avatar-btn" title="Change photo"><div id="meAvatar" class="avatar">?</div></button>
         <div class="me-info">
           <div id="meName" class="me-name">—</div>
-          <div id="meUser" class="me-user">@—</div>
+          <button id="meStatusBtn" class="me-status" title="Set status">
+            <span id="meStatusDot" class="ondot online"></span>
+            <span id="meStatusText">Online</span>
+            <svg class="icon me-caret"><use href="#icon-more"/></svg>
+          </button>
+        </div>
+        <div id="statusMenu" class="status-menu hidden">
+          <div class="sm-title">Set status</div>
+          <div class="sm-presences" id="smPresences">
+            <button class="sm-p" data-p="online"><span class="ondot online"></span>Online</button>
+            <button class="sm-p" data-p="idle"><span class="ondot idle"></span>Idle</button>
+            <button class="sm-p" data-p="dnd"><span class="ondot dnd"></span>Do Not Disturb</button>
+          </div>
+          <input id="statusText" type="text" maxlength="64" placeholder="What's happening?" autocomplete="off" />
+          <div class="sm-activity">
+            <select id="activityType">
+              <option value="">No activity</option>
+              <option value="playing">Playing</option>
+              <option value="listening">Listening to</option>
+              <option value="watching">Watching</option>
+              <option value="competing">Competing in</option>
+            </select>
+            <input id="activityName" type="text" maxlength="64" placeholder="e.g. Chess" autocomplete="off" disabled />
+          </div>
+          <button id="statusSave" class="primary-btn">Save</button>
         </div>
       </div>
     </aside>

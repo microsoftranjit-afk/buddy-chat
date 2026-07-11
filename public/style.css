@@ -168,13 +168,30 @@ html, body {
 .avatar.small { width: 34px; height: 34px; font-size: 13px; }
 .avatar.big { width: 72px; height: 72px; font-size: 28px; }
 
-.me { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-3); flex: 0 0 auto; }
-.me-info { min-width: 0; flex: 1; }
+.me { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg-3); flex: 0 0 auto; position: relative; }
+.me-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
 .me-name { font-weight: 600; color: var(--text); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.me-user { font-size: 12px; color: var(--muted); }
+.me-status { display: flex; align-items: center; gap: 5px; background: transparent; border: none; cursor: pointer; padding: 0; color: var(--muted); font-size: 12px; min-width: 0; text-align: left; }
+.me-status:hover { color: var(--text-2); }
+.me-status .ondot { position: static; border: none; width: 8px; height: 8px; flex: 0 0 auto; }
+.me-status #meStatusText { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.me-caret { width: 13px; height: 13px; opacity: .7; flex: 0 0 auto; }
+
+.status-menu { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 12px; z-index: 30; display: flex; flex-direction: column; gap: 10px; }
+.sm-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.sm-presences { display: flex; gap: 6px; }
+.sm-p { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-3); color: var(--text-2); font-size: 12px; font-weight: 600; cursor: pointer; }
+.sm-p .ondot { position: static; border: none; width: 9px; height: 9px; }
+.sm-p.active { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 14%, var(--bg-3)); }
+.status-menu input[type="text"], .sm-activity select, .sm-activity input { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 13px; outline: none; font-family: inherit; }
+.status-menu input[type="text"]:focus, .sm-activity select:focus, .sm-activity input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
+.sm-activity { display: flex; flex-direction: column; gap: 6px; }
 
 .ondot { position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px; border-radius: 50%; background: #5b6b78; border: 3px solid var(--bg-2); }
-.ondot.on { background: var(--online); }
+.ondot.online { background: var(--online); }
+.ondot.idle { background: #f0b232; }
+.ondot.dnd { background: var(--danger); }
+.ondot.offline { background: #5b6b78; }
 
 /* Chat */
 .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); overflow: hidden; position: relative; }
@@ -354,7 +371,7 @@ html, body {
 .cat-add .icon { width: 16px; height: 16px; }
 .cat-add:hover { background: var(--hover); color: var(--text); }
 .channels { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
-.channel { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 15px; font-weight: 500; transition: background .1s, color .1s; }
+.channel { position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 4px; cursor: pointer; color: var(--muted); font-size: 15px; font-weight: 500; transition: background .1s, color .1s; }
 .channel .chan-icon { width: 18px; height: 18px; opacity: .8; flex: 0 0 auto; }
 .channel:hover { background: var(--hover); color: var(--text-2); }
 .channel.active { background: var(--active); color: var(--text); }
@@ -371,6 +388,22 @@ html, body {
 .modal-card input { width: 100%; padding: 12px 14px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 15px; outline: none; font-family: inherit; }
 .modal-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.friend-bio { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.friend-bio .muted { color: var(--muted); }
+.friend-bio .last-seen { color: var(--muted); }
+.act-ico { width: 12px; height: 12px; vertical-align: -2px; margin-right: 3px; color: var(--accent); fill: none; stroke: currentColor; }
+
+.member-meta { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.member-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.presence.idle { color: #f0b232; }
+.presence.dnd { color: var(--danger); }
+
+.badge { flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.rail-item { overflow: visible; }
+.rail-badge { position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 3px solid var(--rail); }
+.channel-badge { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
 
 @media (max-width: 720px) {
   .app { grid-template-columns: 72px 1fr; }
