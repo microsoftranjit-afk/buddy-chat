@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buddy Chat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Join screen -->
+  <div id="join" class="join-screen">
+    <div class="join-card">
+      <h1>Buddy Chat</h1>
+      <p class="sub">Chat &amp; call with a friend anywhere.</p>
+      <label>Display name
+        <input id="nameInput" type="text" placeholder="e.g. Alex" maxlength="32" />
+      </label>
+      <label>Room name (share this with your friend)
+        <input id="roomInput" type="text" placeholder="e.g. secret-hangout" maxlength="64" />
+      </label>
+      <button id="joinBtn">Enter</button>
+      <p class="hint">Pick any room name and tell your friend the exact same one.</p>
+    </div>
+  </div>
+
+  <!-- Main app -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div class="room-info">
+        <span class="dot"></span>
+        <span id="roomLabel">room</span>
+        <span class="members" id="membersLabel"></span>
+      </div>
+      <div class="actions">
+        <button id="callBtn" class="btn call">📞 Call</button>
+        <button id="hangupBtn" class="btn hangup hidden">⛔ Hang up</button>
+        <button id="leaveBtn" class="btn ghost">Leave</button>
+      </div>
+    </header>
+
+    <main class="messages" id="messages"></main>
+
+    <footer class="composer">
+      <input id="msgInput" type="text" placeholder="Type a message…" maxlength="4000" autocomplete="off" />
+      <button id="sendBtn" class="btn primary">Send</button>
+    </footer>
+
+    <!-- Call overlay -->
+    <div id="callOverlay" class="call-overlay hidden">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <video id="localVideo" autoplay playsinline muted></video>
+      <div class="call-controls">
+        <button id="toggleAudio" class="btn round">🎤</button>
+        <button id="toggleVideo" class="btn round">📷</button>
+        <button id="endCall" class="btn round hangup">⛔</button>
+      </div>
+      <div id="callStatus" class="call-status">Connecting…</div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

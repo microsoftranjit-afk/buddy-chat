@@ -1,0 +1,18 @@
+{
+  "name": "buddy-chat",
+  "version": "1.0.0",
+  "description": "Lightweight real-time chat + voice/video calls (Discord/Telegram style)",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}
