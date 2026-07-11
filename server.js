@@ -392,7 +392,14 @@ app.get("/api/stickers/search", (req, res) => klipy(req, res, "stickers", "searc
 
 // ---- Socket ----
 const dmRoom = (a, b) => "dm:" + [a, b].sort().join("|");
-const history = new Map();
+const HISTORY_FILE = path.join(DATA_DIR, "history.json");
+let history = new Map();
+try { const h = JSON.parse(fs.readFileSync(HISTORY_FILE, "utf8")); if (h && typeof h === "object") history = new Map(Object.entries(h)); } catch {}
+let saveHistoryTimer = null;
+function scheduleSaveHistory() {
+  if (saveHistoryTimer) return;
+  saveHistoryTimer = setTimeout(() => { saveHistoryTimer = null; try { const obj = {}; for (const [k, v] of history) obj[k] = v; fs.writeFileSync(HISTORY_FILE, JSON.stringify(obj)); } catch (e) {} }, 800);
+}
 function roomMsgs(room) { if (!history.has(room)) history.set(room, []); return history.get(room); }
 
 function canPost(room, uname) {
@@ -461,6 +468,7 @@ io.on("connection", (socket) => {
 
   function postMessage(msg) {
     const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
+    scheduleSaveHistory();
     io.to(socket.activeRoom).emit("message", msg);
   }
   socket.on("message", (text) => {
@@ -484,6 +492,7 @@ io.on("connection", (socket) => {
     const i = arr.findIndex((x) => x.id === id);
     if (i === -1 || arr[i].user !== users[socket.user].username) return;
     arr.splice(i, 1);
+    scheduleSaveHistory();
     io.to(socket.activeRoom).emit("deleted", { id });
   });
 
@@ -503,5 +512,9 @@ io.on("connection", (socket) => {
     }
   });
 });
+
+function flushHistory() { try { const obj = {}; for (const [k, v] of history) obj[k] = v; fs.writeFileSync(HISTORY_FILE, JSON.stringify(obj)); } catch (e) {} }
+process.on("SIGINT", () => { flushHistory(); process.exit(0); });
+process.on("SIGTERM", () => { flushHistory(); process.exit(0); });
 
 server.listen(PORT, () => console.log(`Buddy-chat running on http://localhost:${PORT}`));
