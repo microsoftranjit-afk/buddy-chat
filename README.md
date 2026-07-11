@@ -37,6 +37,26 @@ the same accounts, servers, and messages.
 - Optional offline/self-contained mode: set `BUDDY_LOCAL=1` to run the bundled
   server inside the app (data stored under the app's user-data folder).
 
+## Desktop app (Tauri, tiny installer)
+
+For a small (~5–10 MB) Windows installer, the app is also packaged with
+**[Tauri](https://tauri.app)**, which uses the OS WebView2 instead of bundling
+Chromium. The Tauri window simply loads your shared server URL (same resolution
+rules as above), so it stays a thin client.
+
+Prerequisites (one-time): install [Rust](https://rustup.rs), the **VS Build
+Tools** (MSVC `Desktop development with C++` workload), and the **WebView2
+SDK**. Then:
+
+```
+npm install
+npm run tauri:build
+```
+
+Output: `src-tauri/target/release/bundle/nsis/Buddy_1.1.0_x64-setup.exe`.
+Run in dev with `npm run tauri:dev`. The backend URL can be overridden with the
+`ELECTRON_SERVER_URL` env var.
+
 ## How the login works (no "stuck" screen)
 
 The join screen is fully client-side. The socket.io client is **vendored**
