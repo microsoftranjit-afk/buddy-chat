@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -39,6 +39,7 @@ function createWindow() {
     backgroundColor: "#1e1f22",
     title: "Buddy",
     icon: path.join(__dirname, "build", "icon.png"),
+    autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -63,6 +64,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   if (process.env.BUDDY_LOCAL === "1") {
     const srv = startLocalServer();
     currentUrl = "http://127.0.0.1:" + (process.env.PORT || 45900);
