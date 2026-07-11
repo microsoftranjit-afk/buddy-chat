@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "data");
 
 // ---- File uploads (images / videos) ----
-const UPLOAD_DIR = path.join(__dirname, "public", "uploads");
+const UPLOAD_DIR = process.env.UPLOAD_DIR ? path.resolve(process.env.UPLOAD_DIR) : path.join(__dirname, "public", "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
@@ -554,3 +554,5 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => console.log(`Buddy-chat running on http://localhost:${PORT}`));
+
+module.exports = { server, io };

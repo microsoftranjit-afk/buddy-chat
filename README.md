@@ -24,13 +24,16 @@ name. Tell your friend the **same room name** and have them join. Done.
 
 ## Desktop app (Electron)
 
-The `npm run electron` command opens a native desktop window that loads the
-deployed server, so you and your friend (on the web) share the same rooms.
+The desktop app is **fully self-contained**: it starts the bundled chat server
+inside the app and loads it from `http://127.0.0.1:45900`, so no external server
+is required. Accounts, servers, and uploads are stored under the app's user-data
+folder, so they persist between launches.
 
-- Point it at your server via `config.json` (`serverUrl`) or the
-  `ELECTRON_SERVER_URL` env var. It falls back to the Render URL.
+- Run in dev: `npm run electron` (needs `npm install` first).
 - To build a Windows installer: `npm run dist` (produces `dist/Buddy Setup.exe`).
   Requires `electron-builder` (already a dev dependency).
+- To point the desktop app at a different server instead of the bundled one, set
+  the `ELECTRON_SERVER_URL` env var before launching.
 
 ## How the login works (no "stuck" screen)
 

@@ -2,6 +2,7 @@
   "name": "buddy-chat",
   "version": "1.1.0",
   "description": "Lightweight real-time chat + voice/video calls (Discord/Telegram style)",
+  "author": "Buddy",
   "main": "electron-main.js",
   "type": "commonjs",
   "engines": {
@@ -24,13 +25,27 @@
   "build": {
     "appId": "com.buddy.chat",
     "productName": "Buddy",
+    "icon": "build/icon.png",
     "files": [
-      "public/**/*",
+      "package.json",
+      "server.js",
       "electron-main.js",
-      "config.json"
+      "config.json",
+      "public/**/*",
+      "build/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": [
+        "AppImage"
+      ]
     }
   }
 }
