@@ -3,6 +3,7 @@ const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
 const express = require("express");
+const multer = require("multer");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -10,6 +11,28 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
+
+// ---- File uploads (images / videos) ----
+const UPLOAD_DIR = path.join(__dirname, "public", "uploads");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const raw = (file.originalname.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const ext = raw.slice(0, 8);
+    const id = crypto.randomBytes(12).toString("hex");
+    cb(null, id + (ext ? "." + ext : ""));
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 120 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^(image|video)\//.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image and video files are allowed."));
+  },
+});
+app.use("/uploads", express.static(UPLOAD_DIR));
 
 // ---- Config ----
 let fileConfig = {};
@@ -61,6 +84,38 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/healthz", (req, res) => res.json({ ok: true }));
 
+// ---- ICE servers (STUN + optional TURN via env) ----
+app.get("/api/config", (req, res) => {
+  const ice = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ];
+  if (process.env.TURN_URL) {
+    ice.push({
+      urls: process.env.TURN_URL.split(",").map((s) => s.trim()).filter(Boolean),
+      username: process.env.TURN_USER || "",
+      credential: process.env.TURN_PASS || "",
+    });
+  }
+  res.json({ iceServers: ice });
+});
+
+// ---- Media upload (images / videos) ----
+app.post("/api/upload", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  upload.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "No file received." });
+    res.json({
+      ok: true,
+      url: "/uploads/" + req.file.filename,
+      name: String(req.file.originalname || "file").slice(0, 200),
+      kind: req.file.mimetype.startsWith("video") ? "video" : "image",
+      size: req.file.size,
+    });
+  });
+});
+
 function authToken(req) {
   const h = req.headers["authorization"] || "";
   const t = h.startsWith("Bearer ") ? h.slice(7) : (req.body && req.body.token);
@@ -68,16 +123,29 @@ function authToken(req) {
 }
 function userFromToken(t) { return t ? sessions.get(t) : null; }
 
+function findUser(login) {
+  const u = norm(login);
+  if (users[u]) return u;
+  const lower = String(login || "").toLowerCase();
+  for (const k in users) if (users[k].email && users[k].email.toLowerCase() === lower) return k;
+  return null;
+}
+
 app.post("/api/signup", (req, res) => {
-  const { username, password, displayName } = req.body || {};
+  const { username, password, displayName, email } = req.body || {};
   if (!validUser(username)) return res.status(400).json({ error: "Username must be 3-20 chars (letters, numbers, _)." });
   if (!password || password.length < 4) return res.status(400).json({ error: "Password must be at least 4 characters." });
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email." });
   const uname = norm(username);
   if (users[uname]) return res.status(409).json({ error: "That username is taken." });
+  if (email) {
+    const lower = email.toLowerCase();
+    for (const k in users) if (users[k].email && users[k].email.toLowerCase() === lower) return res.status(409).json({ error: "That email is already used." });
+  }
   const { salt, hash } = hashPassword(password);
   users[uname] = {
     username, displayName: (displayName && displayName.trim()) || username,
-    salt, hash, pic: "", bio: "", friends: [],
+    email: email ? email.toLowerCase() : "", salt, hash, pic: "", bio: "", friends: [],
   };
   saveUsers();
   const token = newSession(uname);
@@ -86,9 +154,9 @@ app.post("/api/signup", (req, res) => {
 
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body || {};
-  const uname = norm(username);
-  const u = users[uname];
-  if (!u || !verifyPassword(password || "", u.salt, u.hash)) return res.status(401).json({ error: "Wrong username or password." });
+  const uname = findUser(username);
+  const u = uname && users[uname];
+  if (!u || !verifyPassword(password || "", u.salt, u.hash)) return res.status(401).json({ error: "Wrong username/email or password." });
   const token = newSession(uname);
   res.json({ ok: true, token, profile: publicProfile(uname) });
 });
@@ -229,6 +297,19 @@ io.on("connection", (socket) => {
     io.to(socket.activeRoom).emit("message", msg);
   });
 
+  socket.on("file", ({ url, kind, name, size }) => {
+    if (!ensureAuth() || !socket.activeRoom) return;
+    if (typeof url !== "string" || !/^\/uploads\//.test(url)) return;
+    const msg = {
+      id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"),
+      user: users[socket.user].username,
+      kind: kind === "video" ? "video" : "image",
+      url: url.slice(0, 400), name: String(name || "").slice(0, 200), size: Number(size) || 0, ts: Date.now(),
+    };
+    const arr = roomMsgs(socket.activeRoom); arr.push(msg); if (arr.length > 500) arr.shift();
+    io.to(socket.activeRoom).emit("message", msg);
+  });
+
   socket.on("delete", ({ id }) => {
     if (!ensureAuth() || !socket.activeRoom) return;
     const arr = roomMsgs(socket.activeRoom);
@@ -239,10 +320,14 @@ io.on("connection", (socket) => {
   });
 
   // calls relayed to the active DM room
-  socket.on("call:ring", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ring", { fromName: users[socket.user].displayName }); });
+  socket.on("call:ring", () => {
+    if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ring", { from: users[socket.user].username, fromName: users[socket.user].displayName });
+  });
   socket.on("call:offer", (offer) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:offer", { from: socket.id, offer }); });
   socket.on("call:answer", (answer) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:answer", { from: socket.id, answer }); });
   socket.on("call:ice", (candidate) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:ice", { from: socket.id, candidate }); });
+  socket.on("call:accept", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:accept"); });
+  socket.on("call:reject", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:reject"); });
   socket.on("call:end", () => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("call:end"); });
 
   socket.on("disconnect", () => {
