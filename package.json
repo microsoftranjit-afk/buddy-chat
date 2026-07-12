@@ -34,6 +34,7 @@
     "files": [
       "package.json",
       "electron-main.js",
+      "preload.js",
       "config.json",
       "public/**/*",
       "build/**/*"

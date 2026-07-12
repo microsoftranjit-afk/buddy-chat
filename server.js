@@ -314,7 +314,8 @@ app.post("/api/presence", (req, res) => {
   if (activity && typeof activity === "object" && activity !== null) {
     if (ACTIVITY_TYPES.includes(activity.type)) {
       const name = String(activity.name || "").slice(0, 64).trim();
-      u.activity = name ? { type: activity.type, name } : null;
+      const details = String(activity.details || "").slice(0, 64).trim();
+      u.activity = name ? { type: activity.type, name, details: details || undefined } : null;
     } else u.activity = null;
   } else if (activity === null || activity === undefined) {
     u.activity = null;

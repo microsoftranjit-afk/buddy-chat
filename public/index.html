@@ -145,7 +145,8 @@
               <option value="watching">Watching</option>
               <option value="competing">Competing in</option>
             </select>
-            <input id="activityName" type="text" maxlength="64" placeholder="e.g. Chess" autocomplete="off" disabled />
+            <input id="activityName" type="text" maxlength="64" placeholder="e.g. Fortnite" autocomplete="off" disabled />
+            <input id="activityDetails" type="text" maxlength="64" placeholder="Details (e.g. Squad fill · 20 left)" autocomplete="off" disabled />
           </div>
           <button id="statusSave" class="primary-btn">Save</button>
         </div>
@@ -301,6 +302,31 @@
           <button id="toggleVideo" class="round" title="Camera"><svg class="icon"><use href="#icon-video"/></svg></button>
           <button id="endCall" class="round hangup" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg></button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User profile popup -->
+  <div id="profileModal" class="modal profile-modal hidden">
+    <div class="profile-card">
+      <div class="profile-banner" id="pmBanner"></div>
+      <div class="profile-top">
+        <div id="pmAvatar" class="avatar xxl"></div>
+      </div>
+      <div class="profile-name" id="pmName">—</div>
+      <div class="profile-user" id="pmUser">@user</div>
+      <div class="profile-presence" id="pmPresence"></div>
+      <div class="profile-activity hidden" id="pmActivity">
+        <div class="profile-act-label" id="pmActLabel"></div>
+        <div class="profile-act-name" id="pmActName"></div>
+        <div class="profile-act-details" id="pmActDetails"></div>
+      </div>
+      <div class="profile-bio hidden" id="pmBioWrap">
+        <div class="profile-sec-label">About Me</div>
+        <div class="profile-bio-text" id="pmBio"></div>
+      </div>
+      <div class="profile-actions">
+        <button id="pmMessage" class="primary-btn">Message</button>
       </div>
     </div>
   </div>

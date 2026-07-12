@@ -1,6 +1,7 @@
-const { app, BrowserWindow, Menu } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { execFile } = require("child_process");
 
 // Default backend. Override with ELECTRON_SERVER_URL (env) or serverUrl (config.json).
 const DEFAULT_SERVER_URL = "https://buddy-chat-bd6c.onrender.com";
@@ -34,6 +35,58 @@ function startLocalServer() {
 }
 
 let currentUrl = null;
+let mainWin = null;
+let manualOverride = false;
+let currentGame = null;
+
+// Map of running process image names -> activity shown to friends.
+const GAME_MAP = {
+  "fortniteclient-win64-shipping.exe": "Fortnite",
+  "fortniteclient-win32-shipping.exe": "Fortnite",
+  "valorant.exe": "Valorant",
+  "leagueclient.exe": "League of Legends",
+  "league of legends.exe": "League of Legends",
+  "cs2.exe": "Counter-Strike 2",
+  "csgo.exe": "Counter-Strike",
+  "r5apex.exe": "Apex Legends",
+  "robloxplayerbeta.exe": "Roblox",
+  "rocketleague.exe": "Rocket League",
+  "gta5.exe": "Grand Theft Auto V",
+  "gtav.exe": "Grand Theft Auto V",
+  "eldenring.exe": "Elden Ring",
+  "overwatch.exe": "Overwatch 2",
+  "overwatch2.exe": "Overwatch 2",
+  "destiny2.exe": "Destiny 2",
+  "mw2.exe": "Call of Duty",
+  "modernwarfare.exe": "Call of Duty",
+  "cod.exe": "Call of Duty",
+  "wow.exe": "World of Warcraft",
+  "wowclassic.exe": "World of Warcraft",
+  "dota2.exe": "Dota 2",
+  "deadbydaylight.exe": "Dead by Daylight",
+  "eaapp.exe": "EA App",
+};
+
+function scanGames() {
+  if (!mainWin || mainWin.isDestroyed() || manualOverride) return;
+  execFile("tasklist", ["/fo", "csv", "/nh"], { windowsHide: true, maxBuffer: 1024 * 1024 }, (err, out) => {
+    if (err || !out) return;
+    const found = new Set();
+    out.split(/\r?\n/).forEach((line) => {
+      const m = line.match(/"([^"]+)\.exe"/i);
+      if (!m) return;
+      const base = m[1].toLowerCase() + ".exe";
+      if (GAME_MAP[base]) found.add(GAME_MAP[base]);
+    });
+    const name = found.size ? [...found][0] : null;
+    if (name !== currentGame) {
+      currentGame = name;
+      try { mainWin.webContents.send("buddy:game", name ? { type: "playing", name } : null); } catch {}
+    }
+  });
+}
+
+ipcMain.on("buddy:manual", (_e, on) => { manualOverride = !!on; if (!manualOverride) scanGames(); });
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -48,8 +101,10 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
+  mainWin = win;
 
   win.loadURL(currentUrl);
 
@@ -81,6 +136,8 @@ app.whenReady().then(() => {
     currentUrl = resolveServerUrl();
     createWindow();
   }
+  scanGames();
+  setInterval(scanGames, 8000);
 });
 
 app.on("window-all-closed", () => {

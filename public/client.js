@@ -25,7 +25,9 @@
   function presenceDotClass(status) { return status === "online" ? "online" : status === "idle" ? "idle" : status === "dnd" ? "dnd" : "offline"; }
   function activityText(a) {
     const verb = { playing: "Playing", listening: "Listening to", watching: "Watching", competing: "Competing in", custom: "" }[a.type] || "";
-    return (verb ? verb + " " : "") + a.name;
+    let s = (verb ? verb + " " : "") + (a.name || "");
+    if (a.details) s += " — " + a.details;
+    return s;
   }
   function relTime(ts) {
     const s = Math.floor((Date.now() - ts) / 1000);
@@ -63,7 +65,7 @@
   let myUser = localStorage.getItem("buddy-user") || "";
   let myName = localStorage.getItem("buddy-name") || "";
   let myPic = localStorage.getItem("buddy-pic") || "";
-  let myPresence = "online", myStatus = "", myActivity = null;
+  let myPresence = "online", myStatus = "", myActivity = null, manualActivity = false;
   let unreadMap = {};
   let typingName = null, typingTimer = null;
   function persistAuth() { localStorage.setItem("buddy-token", token); localStorage.setItem("buddy-user", myUser); localStorage.setItem("buddy-name", myName); localStorage.setItem("buddy-pic", myPic); }
@@ -234,8 +236,7 @@
       else renderServerView();
     } catch {}
   }
-  socket.on("friends", (list) => { state.friends = list || []; list.forEach(setProfile); if (view === "dm") renderFriendsDom(); });
-  socket.on("requests", (r) => { state.requests = r || { incoming: [], outgoing: [] }; (r.incoming || []).forEach(setProfile); (r.outgoing || []).forEach(setProfile); if (view === "dm") renderRequestsDom(); });
+  socket.on("friends", (list) => { state.friends = list || []; list.forEach(setProfile); if (view === "dm") renderFriendsDom(); updateHeader(); });
   socket.on("servers", (list) => {
     state.servers = list || [];
     list.forEach((s) => (s.members || []).forEach(setProfile));
@@ -244,6 +245,7 @@
       if (!state.servers.find((x) => x.id === activeServer)) selectHome();
       else renderServerView();
     }
+    updateHeader();
   });
   socket.on("dm-roster", (list) => list.forEach(setProfile));
 
@@ -318,6 +320,7 @@
       const row = document.createElement("div"); row.className = "friend" + (activePeer && p.username === activePeer.username ? " active" : "");
       const av = avatarEl(p.displayName, p.pic);
       av.appendChild(makeDot(p.presence));
+      av.addEventListener("click", (e) => { e.stopPropagation(); openProfile(p.username); });
       const meta = document.createElement("div"); meta.className = "friend-meta";
       const nm = document.createElement("div"); nm.className = "friend-name"; nm.textContent = p.displayName;
       const un = document.createElement("div"); un.className = "friend-bio"; un.innerHTML = buildSub(p);
@@ -341,6 +344,7 @@
         setProfile(p);
         const card = document.createElement("div"); card.className = "req-card";
         const av = avatarEl(p.displayName, p.pic, "small");
+        av.addEventListener("click", (e) => { e.stopPropagation(); openProfile(p.username); });
         const meta = document.createElement("div"); meta.className = "req-meta";
         meta.innerHTML = '<div class="req-name">' + escapeHtml(p.displayName) + '</div><div class="req-sub">@' + escapeHtml(p.username) + ' wants to be friends</div>';
         const acts = document.createElement("div"); acts.className = "req-acts";
@@ -357,6 +361,7 @@
         setProfile(p);
         const card = document.createElement("div"); card.className = "req-card";
         const av = avatarEl(p.displayName, p.pic, "small");
+        av.addEventListener("click", (e) => { e.stopPropagation(); openProfile(p.username); });
         const meta = document.createElement("div"); meta.className = "req-meta";
         meta.innerHTML = '<div class="req-name">' + escapeHtml(p.displayName) + '</div><div class="req-sub">Request sent to @' + escapeHtml(p.username) + '</div>';
         card.append(av, meta); box.appendChild(card);
@@ -386,6 +391,7 @@
       const row = document.createElement("div"); row.className = "member";
       const av = avatarEl(m.displayName, m.pic, "small");
       av.appendChild(makeDot(m.presence));
+      av.addEventListener("click", (e) => { e.stopPropagation(); openProfile(m.username); });
       const meta = document.createElement("div"); meta.className = "member-meta";
       const nm = document.createElement("div"); nm.className = "member-name"; nm.textContent = (m.username === myUser ? m.displayName + " (you)" : m.displayName);
       const sub = document.createElement("div"); sub.className = "member-sub"; sub.innerHTML = buildSub(m);
@@ -395,6 +401,33 @@
   }
 
   function flash(msg) { const e = $("friendMsg"); e.textContent = msg; e.className = "friend-msg ok"; e.classList.remove("hidden"); setTimeout(() => e.classList.add("hidden"), 2800); }
+
+  // ---- Profile popup ----
+  const ACT_LABELS = { playing: "Playing", listening: "Listening to", watching: "Watching", competing: "Competing in", custom: "Custom" };
+  function openProfile(username) {
+    const p = profiles.get(username); if (!p) return;
+    const av = $("pmAvatar"); av.innerHTML = ""; av.appendChild(avatarEl(p.displayName, p.pic, "xxl"));
+    $("pmName").textContent = p.displayName || username;
+    $("pmUser").textContent = "@" + username;
+    const pres = p.online ? presenceDotClass(p.presence) : "offline";
+    const pd = $("pmPresence"); pd.innerHTML = "";
+    const dot = makeDot(pres); const txt = document.createElement("span");
+    txt.textContent = p.online ? headerPresence({ online: true, presence: p.presence, activity: p.activity, status: p.status }) : (p.lastSeen ? "Last seen " + relTime(p.lastSeen) : "Offline");
+    pd.append(dot, txt);
+    const act = $("pmActivity");
+    if (p.activity && p.activity.name) {
+      act.classList.remove("hidden");
+      $("pmActLabel").textContent = ACT_LABELS[p.activity.type] || "Activity";
+      $("pmActName").textContent = p.activity.name || "";
+      const d = $("pmActDetails"); d.textContent = p.activity.details || ""; d.style.display = p.activity.details ? "" : "none";
+    } else act.classList.add("hidden");
+    const bioWrap = $("pmBioWrap");
+    if (p.bio) { bioWrap.classList.remove("hidden"); $("pmBio").textContent = p.bio; } else bioWrap.classList.add("hidden");
+    $("pmMessage").onclick = () => { closeProfile(); openDM(username); };
+    $("profileModal").classList.remove("hidden");
+  }
+  function closeProfile() { $("profileModal").classList.add("hidden"); }
+  $("profileModal").addEventListener("click", (e) => { if (e.target === $("profileModal")) closeProfile(); });
 
   // Add friend (sends request)
   document.querySelector(".add-friend").addEventListener("click", (e) => { if (e.target.closest(".field-icon")) addFriend(); });
@@ -555,7 +588,9 @@
     const act = myActivity || null;
     $("activityType").value = act ? act.type : "";
     $("activityName").value = act ? act.name : "";
+    $("activityDetails").value = act ? (act.details || "") : "";
     $("activityName").disabled = !act;
+    $("activityDetails").disabled = !act;
   }
   function closeStatusMenu() { $("statusMenu").classList.add("hidden"); }
   $("meStatusBtn").addEventListener("click", (e) => { e.stopPropagation(); const m = $("statusMenu"); if (m.classList.contains("hidden")) openStatusMenu(); else closeStatusMenu(); });
@@ -564,11 +599,14 @@
     if (m && !m.classList.contains("hidden") && !m.contains(e.target) && e.target !== $("meStatusBtn") && !$("meStatusBtn").contains(e.target)) closeStatusMenu();
   });
   [...$("smPresences").children].forEach((b) => { b.addEventListener("click", () => { smPresence = b.dataset.p; [...$("smPresences").children].forEach((x) => x.classList.remove("active")); b.classList.add("active"); }); });
-  $("activityType").addEventListener("change", (e) => { $("activityName").disabled = !e.target.value; if (e.target.value) $("activityName").focus(); });
+  $("activityType").addEventListener("change", (e) => { $("activityName").disabled = !e.target.value; $("activityDetails").disabled = !e.target.value; if (e.target.value) $("activityName").focus(); });
   $("statusSave").addEventListener("click", async () => {
     const type = $("activityType").value;
     const name = $("activityName").value.trim();
-    const activity = type ? { type, name } : null;
+    const details = $("activityDetails").value.trim();
+    const activity = type ? { type, name, details } : null;
+    manualActivity = !!activity;
+    if (window.buddyDesktop && window.buddyDesktop.setManualOverride) window.buddyDesktop.setManualOverride(manualActivity);
     const res = await api("/api/presence", { presence: smPresence, status: $("statusText").value.trim(), activity }, true);
     if (res && res.ok && res.profile) { myPresence = res.profile.presence; myStatus = res.profile.status; myActivity = res.profile.activity; renderMyStatus(); }
     closeStatusMenu();
@@ -693,6 +731,19 @@
   $("micSelect").onchange = (e) => { devices.mic = e.target.value; saveDevices(); if (localStream && inCall) restartStream(); else if (localStream) { const a = localStream.getAudioTracks()[0]; if (a) a.enabled = true; } };
   $("speakerSelect").onchange = (e) => { devices.speaker = e.target.value; saveDevices(); applySpeaker(); };
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) refreshDevices();
+
+  // ====================================================================
+  //  DESKTOP AUTO GAME DETECTION (Electron)
+  // ====================================================================
+  if (window.buddyDesktop && window.buddyDesktop.subscribeGame) {
+    window.buddyDesktop.subscribeGame((game) => {
+      if (manualActivity || !token) return;
+      const activity = game ? { type: game.type || "playing", name: game.name, details: game.details || "" } : null;
+      api("/api/presence", { presence: myPresence, status: myStatus, activity }, true)
+        .then((res) => { if (res && res.ok && res.profile) { myPresence = res.profile.presence; myStatus = res.profile.status; myActivity = res.profile.activity; renderMyStatus(); updateHeader(); } })
+        .catch(() => {});
+    });
+  }
 
   // ====================================================================
   //  CALLS (WebRTC)

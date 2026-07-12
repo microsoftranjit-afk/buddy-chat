@@ -400,6 +400,27 @@ html, body {
 .modal-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
+/* ===================== PROFILE POPUP ===================== */
+.avatar.xxl { width: 92px; height: 92px; font-size: 36px; }
+.profile-modal { align-items: flex-start; justify-content: center; padding-top: 8vh; }
+.profile-card { width: 360px; max-width: 92%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; animation: pop .2s ease; }
+.profile-banner { height: 64px; background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #000)); }
+.profile-top { display: flex; padding: 0 18px; margin-top: -46px; }
+.profile-top .avatar.xxl { border: 5px solid var(--bg-2); }
+.profile-name { font-size: 19px; font-weight: 700; color: var(--text); margin: 10px 18px 0; }
+.profile-user { font-size: 13px; color: var(--muted); margin: 2px 18px 0; }
+.profile-presence { display: flex; align-items: center; gap: 7px; margin: 8px 18px 0; font-size: 13px; color: var(--muted); }
+.profile-activity { margin: 14px 18px 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; padding: 11px 12px; }
+.profile-act-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); font-weight: 700; }
+.profile-act-name { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 3px; }
+.profile-act-details { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.profile-bio { margin: 14px 18px 0; }
+.profile-sec-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 700; margin-bottom: 5px; }
+.profile-bio-text { font-size: 14px; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.profile-actions { padding: 16px 18px 18px; }
+.profile-actions .primary-btn { width: 100%; }
+.avatar-btn.clickable, .friend .avatar, .member .avatar, .req-card .avatar { cursor: pointer; }
+
 .friend-bio { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .friend-bio .muted { color: var(--muted); }
 .friend-bio .last-seen { color: var(--muted); }
