@@ -796,8 +796,8 @@
   }
   function applySpeaker() { if (remoteVideo && devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {}); }
   $("deviceRefresh").onclick = refreshDevices;
-  $("micSelect").onchange = (e) => { devices.mic = e.target.value; saveDevices(); if (localStream && inCall) restartStream(); else if (localStream) { const a = localStream.getAudioTracks()[0]; if (a) a.enabled = true; } };
-  $("speakerSelect").onchange = (e) => { devices.speaker = e.target.value; saveDevices(); applySpeaker(); };
+  $("micSelect").onchange = (e) => { devices.mic = e.target.value; saveDevices(); if (peer && localStream && inCall) restartStream(); else if (localStream) { const a = localStream.getAudioTracks()[0]; if (a) a.enabled = true; } };
+  $("speakerSelect").onchange = (e) => { devices.speaker = e.target.value; saveDevices(); if (remoteVideo && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {}); };
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) refreshDevices();
 
   // ====================================================================
@@ -859,6 +859,7 @@
   // ====================================================================
   const callOverlay = $("callOverlay"), localVideo = $("localVideo"), remoteVideo = $("remoteVideo"), callStatus = $("callStatus"), callAvatar = $("callAvatar");
   let localStream = null, peer = null, inCall = false, pendingOffer = null, ringFrom = null, pendingCandidates = [];
+  let screenStream = null;
 
   function makePeer() {
     const pc = new RTCPeerConnection(ICE);
@@ -871,6 +872,10 @@
       remoteVideo.play().catch(() => {});
     };
     return pc;
+  }
+  function applyCallDevices() {
+    if (remoteVideo && devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {});
+    if (peer && localStream && inCall) restartStream();
   }
   async function restartStream() {
     if (!peer || !localStream) return;
@@ -893,6 +898,28 @@
     if (localStream.getVideoTracks()[0]) localStream.getVideoTracks()[0].enabled = videoEnabled;
     if (localStream.getAudioTracks()[0]) localStream.getAudioTracks()[0].enabled = audioEnabled;
     oldStream.getTracks().forEach((t) => t.stop());
+  }
+  async function startScreenShare() {
+    if (!peer) { flash("Start a call before sharing your screen.", "err"); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false }); }
+    catch (e) { return; } // user cancelled
+    screenStream = stream;
+    const screenTrack = stream.getVideoTracks()[0];
+    const sender = peer.getSenders().find((s) => s.track && s.track.kind === "video");
+    if (sender) sender.replaceTrack(screenTrack);
+    localVideo.srcObject = stream; localVideo.classList.remove("hidden-cam");
+    screenTrack.onended = () => stopScreenShare();
+    $("toggleScreen").classList.add("hangup");
+    flash("Sharing your screen.");
+  }
+  function stopScreenShare() {
+    if (screenStream) { screenStream.getTracks().forEach((t) => t.stop()); screenStream = null; }
+    const sender = peer && peer.getSenders().find((s) => s.track && s.track.kind === "video");
+    const camTrack = localStream && localStream.getVideoTracks()[0];
+    if (sender) sender.replaceTrack(camTrack || null);
+    if (localStream) { localVideo.srcObject = localStream; localVideo.classList.toggle("hidden-cam", !(localStream.getVideoTracks()[0] && localStream.getVideoTracks()[0].enabled)); }
+    const ts = $("toggleScreen"); if (ts) ts.classList.remove("hangup");
   }
   async function startCall(asInitiator) {
     const audio = devices.mic ? { deviceId: { exact: devices.mic } } : true;
@@ -923,12 +950,22 @@
     remoteVideo.srcObject = null; localVideo.srcObject = null; localVideo.classList.remove("hidden-cam");
     inCall = false; pendingOffer = null; pendingCandidates = [];
     callOverlay.classList.add("hidden"); callAvatar.classList.add("hidden");
+    $("callPill").classList.add("hidden");
     $("callBtn").classList.remove("hidden"); $("hangupBtn").classList.add("hidden");
     socket.emit("call:end");
+    // Stop any active screen share when the call ends
+    if (screenStream) { screenStream.getTracks().forEach((t) => t.stop()); screenStream = null; const ts = $("toggleScreen"); if (ts) ts.classList.remove("hangup"); }
   }
+  function showCallOverlay() { callOverlay.classList.remove("hidden"); $("callPill").classList.add("hidden"); }
+  function hideCallOverlay() { callOverlay.classList.add("hidden"); if (inCall) $("callPill").classList.remove("hidden"); }
+
   $("callBtn").onclick = async () => { if (inCall || !activePeer) return; callStatus.textContent = "Ringing…"; socket.emit("call:ring"); await startCall(true); };
   $("hangupBtn").onclick = endCall;
   $("endCall").onclick = endCall;
+  $("toggleScreen").onclick = () => { if (screenStream) stopScreenShare(); else startScreenShare(); };
+  $("toggleCallView").onclick = () => { if (callOverlay.classList.contains("hidden")) showCallOverlay(); else hideCallOverlay(); };
+  $("showCallBtn").onclick = showCallOverlay;
+  $("endCallPill").onclick = endCall;
 
   const incoming = $("incoming");
   function showIncoming(from, fromName) {
@@ -947,7 +984,7 @@
 
   socket.on("call:ring", ({ from, fromName }) => { if (inCall) return; showIncoming(from, fromName); });
   socket.on("call:offer", ({ offer }) => { if (inCall) handleOffer(offer); else pendingOffer = offer; });
-  socket.on("call:answer", async ({ answer }) => { callStatus.textContent = "Connected"; if (peer) { try { await peer.setRemoteDescription(new RTCSessionDescription(answer)); await flushCandidates(); } catch (e) {} } });
+  socket.on("call:answer", async ({ answer }) => { callStatus.textContent = "Connected"; if (peer) { try { await peer.setRemoteDescription(new RTCSessionDescription(answer)); await flushCandidates(); if (remoteVideo && devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {}); } catch (e) {} } });
   socket.on("call:ice", async ({ candidate }) => { if (peer && candidate) { try { if (peer.remoteDescription && peer.remoteDescription.type) await peer.addIceCandidate(new RTCIceCandidate(candidate)); else pendingCandidates.push(candidate); } catch (e) {} } else if (candidate) pendingCandidates.push(candidate); });
   socket.on("call:accept", () => { callStatus.textContent = "Connected"; });
   socket.on("call:reject", () => { callStatus.textContent = "Call declined"; endCall(); });

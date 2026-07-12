@@ -551,6 +551,16 @@ html, body {
 /* Settings sections animate in */
 .set-section { animation: fade .2s ease; }
 
+/* Chat-header call pill (call hidden, chat visible) */
+.call-pill { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 12px; background: color-mix(in srgb, var(--online) 16%, var(--bg-3)); border: 1px solid color-mix(in srgb, var(--online) 40%, transparent); border-radius: 20px; animation: fade .18s ease; }
+.call-pill-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--online); animation: pulse 2s infinite; flex: 0 0 auto; }
+.call-pill-text { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.call-pill-btn { display: flex; align-items: center; gap: 4px; border: none; border-radius: 14px; padding: 5px 11px; font-size: 12px; font-weight: 700; cursor: pointer; background: var(--accent); color: #fff; transition: filter .15s, transform .1s; }
+.call-pill-btn .icon { width: 15px; height: 15px; fill: #fff; stroke: none; }
+.call-pill-btn.end { background: var(--danger); padding: 5px 8px; }
+.call-pill-btn:hover { filter: brightness(1.1); }
+.call-pill-btn:active { transform: scale(.94); }
+
 @media (max-width: 720px) {
   .app { grid-template-columns: 72px 1fr; }
   .sidebar { display: none; }

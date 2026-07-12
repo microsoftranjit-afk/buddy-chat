@@ -32,6 +32,7 @@
     <symbol id="icon-hash" viewBox="0 0 24 24"><path d="M10 3L8 21M16 3l-2 18M4 8h16M3 16h16"/></symbol>
     <symbol id="icon-user-plus" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0M18 8v6M21 11h-6"/></symbol>
   <symbol id="icon-activity" viewBox="0 0 24 24"><path d="M3 12h3.5l2-7 4 14 3-9 2 4H21"/></symbol>
+  <symbol id="icon-screen" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M9 10l3-3 3 3M12 7v5"/></symbol>
   </svg>
 
   <input type="file" id="picInput" accept="image/*" hidden />
@@ -169,6 +170,12 @@
           </div>
         </div>
         <div class="chat-actions">
+          <div id="callPill" class="call-pill hidden">
+            <span class="call-pill-dot"></span>
+            <span class="call-pill-text">In call</span>
+            <button id="showCallBtn" class="call-pill-btn" title="Show call"><svg class="icon"><use href="#icon-video"/></svg><span>Show</span></button>
+            <button id="endCallPill" class="call-pill-btn end" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg></button>
+          </div>
           <button id="callBtn" class="btn call hidden" title="Start a call"><svg class="icon"><use href="#icon-phone"/></svg><span>Call</span></button>
           <button id="hangupBtn" class="btn hangup hidden" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg><span>End</span></button>
         </div>
@@ -324,11 +331,13 @@
       </div>
       <div class="call-bar">
         <div id="callStatus" class="call-status">Connecting…</div>
-        <div class="call-controls">
-          <button id="toggleAudio" class="round" title="Mute"><svg class="icon"><use href="#icon-mic"/></svg></button>
-          <button id="toggleVideo" class="round" title="Camera"><svg class="icon"><use href="#icon-video"/></svg></button>
-          <button id="endCall" class="round hangup" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg></button>
-        </div>
+      <div class="call-controls">
+        <button id="toggleAudio" class="round" title="Mute"><svg class="icon"><use href="#icon-mic"/></svg></button>
+        <button id="toggleVideo" class="round" title="Camera"><svg class="icon"><use href="#icon-video"/></svg></button>
+        <button id="toggleScreen" class="round" title="Share screen"><svg class="icon"><use href="#icon-screen"/></svg></button>
+        <button id="toggleCallView" class="round" title="Hide call (show chat)"><svg class="icon"><use href="#icon-chat"/></svg></button>
+        <button id="endCall" class="round hangup" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg></button>
+      </div>
       </div>
     </div>
   </div>
