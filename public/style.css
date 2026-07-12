@@ -874,6 +874,7 @@ html, body { font-family: "gg sans", "Inter", "Segoe UI Variable", "Segoe UI", s
 .ctx-item { border-radius: 8px; font-weight: 500; }
 
 /* ==================== REACTIONS ==================== */
+.reactions:empty { display: none; }
 .react-chip { border-radius: 14px; transition: transform .1s ease, background .12s ease; }
 .react-chip:hover { transform: translateY(-1px); }
 .react-chip.mine { box-shadow: inset 0 0 0 1px var(--accent); }
@@ -886,8 +887,44 @@ html, body { font-family: "gg sans", "Inter", "Segoe UI Variable", "Segoe UI", s
 .auth-tabs { border-radius: 12px; }
 .auth-tabs button { border-radius: 9px; }
 
+/* ==================== IN-MESSAGE ACTION TOOLBAR ==================== */
+/* Kill the old floating hover bar entirely (replaced by per-message tools) */
+.hover-bar { display: none !important; }
+
+.msg-actions {
+  position: absolute; top: -15px; right: 6px;
+  display: flex; gap: 1px; padding: 3px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+  opacity: 0; pointer-events: none; transform: translateY(3px) scale(.96);
+  transform-origin: top right;
+  transition: opacity .12s ease, transform .12s ease;
+  z-index: 6;
+}
+.msg.mine .msg-actions { right: auto; left: 6px; transform-origin: top left; }
+.msg:hover > .msg-actions, .msg-actions:hover { opacity: 1; pointer-events: auto; transform: none; }
+.msg.system .msg-actions { display: none; }
+
+.msg-act {
+  width: 30px; height: 30px; flex: 0 0 auto;
+  border: none; background: transparent; color: var(--muted);
+  border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s ease, color .12s ease, transform .08s ease;
+}
+.msg-act:hover { background: color-mix(in srgb, var(--accent) 20%, var(--bg-3)); color: var(--accent); }
+.msg-act.danger:hover { background: color-mix(in srgb, var(--danger) 20%, var(--bg-3)); color: var(--danger); }
+.msg-act:active { transform: scale(.88); }
+.msg-act .icon { width: 17px; height: 17px; }
+
+/* Keep bubbles clear of the toolbar without layout shift */
+.msg { padding-top: 2px; }
+
 @media (max-width: 720px) {
   .messages { padding: 14px 12px 8px; }
   .msg { max-width: 88%; }
   .composer, .reply-bar { margin-left: 10px; margin-right: 10px; }
+  .msg-actions { opacity: 1; pointer-events: auto; transform: none; }
 }

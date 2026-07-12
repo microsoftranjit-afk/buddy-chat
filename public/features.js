@@ -175,10 +175,8 @@
   const chatActions = document.querySelector(".chat-actions");
   if (chatActions) chatActions.prepend(headerTools);
 
-  // ============================================================ CONTEXT MENU + HOVER TOOLBAR
+  // ============================================================ CONTEXT MENU + MESSAGE TOOLBAR
   const ctx = ce("div", "ctx-menu hidden"); root.appendChild(ctx);
-  const hover = ce("div", "hover-bar hidden"); hover.innerHTML = '<button data-act="react" title="React">' + IC("emoji") + '</button><button data-act="reply" title="Reply">' + IC("reply") + '</button><button data-act="more" title="More">' + IC("more") + '</button>';
-  root.appendChild(hover);
   let ctxMsgId = null;
   function msgElFrom(target) { return target.closest ? target.closest(".msg") : null; }
   document.getElementById("messages").addEventListener("contextmenu", (e) => {
@@ -206,9 +204,10 @@
     const el = [...document.getElementById("messages").children].find((c) => c.dataset.id === id);
     if (!el) return ""; const b = el.querySelector(".bubble"); return b ? b.textContent : "";
   }
-  function doAction(act) {
+  function doAction(act, anchor) {
     const id = ctxMsgId; if (!id) return;
-    if (act === "react") { showEmoji("react", id, hover); }
+    const el = [...document.getElementById("messages").children].find((c) => c.dataset.id === id);
+    if (act === "react") { showEmoji("react", id, anchor || (el && el.querySelector('.msg-act[data-act="react"]')) || el); }
     else if (act === "reply") { B.startReply(id); }
     else if (act === "quote") { B.setMsgInput("> " + getMsgText(id).slice(0, 400) + "\n"); }
     else if (act === "copy") { navigator.clipboard && navigator.clipboard.writeText(getMsgText(id)); flash("Copied."); }
@@ -221,22 +220,18 @@
     else if (act === "report") { const reason = prompt("Why are you reporting this message?"); if (reason !== null) api("/api/report/message", { room: B.currentRoom(), id, reason }, true).then(() => flash("Reported.")); }
   }
   document.addEventListener("click", (e) => { if (!ctx.contains(e.target)) ctx.classList.add("hidden"); });
-  hover.addEventListener("click", (e) => {
-    const act = e.target.dataset.act; if (!act) return;
-    const el = msgElFrom(e.target); if (!el) return; ctxMsgId = el.dataset.id; hover.classList.add("hidden");
-    if (act === "react") showEmoji("react", ctxMsgId, hover);
-    else if (act === "reply") B.startReply(ctxMsgId);
-    else if (act === "more") { const r = el.getBoundingClientRect(); openContext(r.right, r.top); }
-  });
-  document.getElementById("messages").addEventListener("mouseover", (e) => {
-    const el = msgElFrom(e.target); if (!el || el.dataset.id === hover.dataset.for) return;
-    hover.dataset.for = el.dataset.id; const r = el.getBoundingClientRect();
-    hover.style.left = (r.right - 84) + "px"; hover.style.top = (r.top + 4) + "px"; hover.classList.remove("hidden");
-  });
-  document.getElementById("messages").addEventListener("mouseout", (e) => {
-    const to = e.relatedTarget; if (to && hover.contains(to)) return; if (to && msgElFrom(to) === msgElFrom(e.target)) return; hover.classList.add("hidden"); hover.dataset.for = "";
-  });
   document.getElementById("messages").addEventListener("click", (e) => {
+    const tbtn = e.target.closest && e.target.closest(".msg-act");
+    if (tbtn) {
+      const el = tbtn.closest(".msg"); if (!el || !el.dataset.id) return;
+      ctxMsgId = el.dataset.id;
+      const act = tbtn.dataset.act;
+      if (act === "react") showEmoji("react", ctxMsgId, tbtn);
+      else if (act === "reply") B.startReply(ctxMsgId);
+      else if (act === "delete") socket.emit("delete", { id: ctxMsgId });
+      else if (act === "more") { const r = tbtn.getBoundingClientRect(); openContext(Math.min(r.right, window.innerWidth - 20), r.bottom + 4); }
+      return;
+    }
     const add = e.target.closest && e.target.closest(".react-add");
     if (add && add.dataset.reactAdd) { showEmoji("react", add.dataset.reactAdd, add); }
     const sp = e.target.closest && e.target.closest(".spoiler");

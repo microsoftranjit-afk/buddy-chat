@@ -628,32 +628,41 @@
       }
       const time = document.createElement("div"); time.className = "time"; time.textContent = new Date(m.ts || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       wrap.append(author, bubble, time);
-      if (m.reactions) renderReactions(el, m);
+      renderReactions(el, wrap, m);
       el.append(wrap);
-      if (mine) { const del = document.createElement("button"); del.className = "del"; del.title = "Delete"; del.innerHTML = '<svg class="icon"><use href="#icon-trash"/></svg>'; del.addEventListener("click", () => { if (m.id) socket.emit("delete", { id: m.id }); }); el.appendChild(del); }
+      const tools = document.createElement("div"); tools.className = "msg-actions";
+      tools.innerHTML =
+        '<button class="msg-act" data-act="react" title="React" aria-label="React"><svg class="icon"><use href="#icon-emoji"/></svg></button>' +
+        '<button class="msg-act" data-act="reply" title="Reply" aria-label="Reply"><svg class="icon"><use href="#icon-reply"/></svg></button>' +
+        (mine ? '<button class="msg-act danger" data-act="delete" title="Delete" aria-label="Delete"><svg class="icon"><use href="#icon-trash"/></svg></button>' : '') +
+        '<button class="msg-act" data-act="more" title="More" aria-label="More"><svg class="icon"><use href="#icon-more"/></svg></button>';
+      el.appendChild(tools);
       el._msg = m;
     }
     messagesEl.appendChild(el); messagesEl.scrollTop = messagesEl.scrollHeight;
     if (!mine && settings.sound && m.kind !== "sticker" && m.kind !== "gif") playPing();
   }
-  function renderReactions(el, m) {
+  function renderReactions(el, wrap, m) {
     const bar = document.createElement("div"); bar.className = "reactions";
     const fill = () => {
       bar.innerHTML = "";
       const rs = m.reactions || {};
-      Object.keys(rs).forEach((emoji) => {
-        const users = rs[emoji]; if (!users || !users.length) return;
+      const keys = Object.keys(rs).filter((k) => rs[k] && rs[k].length);
+      keys.forEach((emoji) => {
+        const users = rs[emoji];
         const chip = document.createElement("button"); chip.className = "react-chip" + (users.includes(myUser) ? " mine" : "");
         chip.innerHTML = '<span class="react-emoji">' + emoji + '</span><span class="react-count">' + users.length + "</span>";
         chip.title = users.map(nameOf).join(", ");
         chip.addEventListener("click", () => socket.emit("react", { id: m.id, emoji }));
         bar.appendChild(chip);
       });
-      const add = document.createElement("button"); add.className = "react-add"; add.dataset.reactAdd = m.id; add.title = "Add reaction";
-      add.innerHTML = '<svg class="icon"><use href="#icon-plus"/></svg>';
-      bar.appendChild(add);
+      if (keys.length) {
+        const add = document.createElement("button"); add.className = "react-add"; add.dataset.reactAdd = m.id; add.title = "Add reaction";
+        add.innerHTML = '<svg class="icon"><use href="#icon-plus"/></svg>';
+        bar.appendChild(add);
+      }
     };
-    fill(); el._fillReactions = fill; el._msg = m;
+    fill(); wrap.appendChild(bar); el._fillReactions = fill; el._msg = m;
   }
   let pingAudio = null;
   function playPing() { try { if (!pingAudio) { const c = new (window.AudioContext || window.webkitAudioContext)(); pingAudio = c; } const o = pingAudio.createOscillator(); const g = pingAudio.createGain(); o.connect(g); g.connect(pingAudio.destination); o.frequency.value = 660; g.gain.value = 0.04; o.start(); o.stop(pingAudio.currentTime + 0.12); } catch {} }
