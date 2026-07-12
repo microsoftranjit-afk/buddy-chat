@@ -206,7 +206,11 @@ function incUnread(room, sender, msg) {
   }
 }
 function resetUnread(user, room) { const m = unread.get(user); if (m && room in m) { delete m[room]; emitUnread(user); } }
-function emitUnread(user) { if (users[user]) io.to("user:" + user).emit("unread", unread.get(user) || {}); }
+  function emitUnread(user) { if (users[user]) io.to("user:" + user).emit("unread", unread.get(user) || {}); }
+  function emitReadReceipts(room, byUser) {
+    const ids = roomMsgs(room).filter((m) => m.user && m.user !== byUser && !m.deleted).map((m) => m.id);
+    if (ids.length) io.to(room).emit("read", { user: byUser, ids });
+  }
 
 // ---- Push helpers ----
 function emitFriendsTo(uname) { if (!users[uname]) return; io.to("user:" + uname).emit("friends", (users[uname].friends || []).map(friendView).filter(Boolean)); }
@@ -315,15 +319,25 @@ app.get("/download", async (req, res) => {
   res.download(candidates[0], path.basename(candidates[0]));
 });
 
-app.post("/api/upload", (req, res) => {
-  const uname = requireUser(req, res); if (!uname) return;
-  if (!rateLimit("upload:" + uname, 30, 60000)) return res.status(429).json({ error: "Slow down." });
-  upload.single("file")(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: "No file received." });
-    res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "file").slice(0, 200), kind: req.file.mimetype.startsWith("video") ? "video" : "image", size: req.file.size });
+  app.post("/api/upload", (req, res) => {
+    const uname = requireUser(req, res); if (!uname) return;
+    if (!rateLimit("upload:" + uname, 30, 60000)) return res.status(429).json({ error: "Slow down." });
+    upload.single("file")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.file) return res.status(400).json({ error: "No file received." });
+      res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "file").slice(0, 200), kind: req.file.mimetype.startsWith("video") ? "video" : "image", size: req.file.size });
+    });
   });
-});
+  const audioUpload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 }, fileFilter: (req, file, cb) => cb(null, /^audio\//.test(file.mimetype)) });
+  app.post("/api/sound", (req, res) => {
+    const uname = requireUser(req, res); if (!uname) return;
+    if (!rateLimit("sound:" + uname, 20, 60000)) return res.status(429).json({ error: "Slow down." });
+    audioUpload.single("file")(req, res, (err) => {
+      if (err) return res.status(400).json({ error: "Only audio files under 8MB." });
+      if (!req.file) return res.status(400).json({ error: "No file received." });
+      res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "sound").slice(0, 60) });
+    });
+  });
 
 function authToken(req) { const h = req.headers["authorization"] || ""; const t = h.startsWith("Bearer ") ? h.slice(7) : (req.body && req.body.token); return t; }
 function userFromToken(t) { return t ? sessions.get(t) : null; }
@@ -688,6 +702,7 @@ io.on("connection", (socket) => {
     socket.activeRoom = room; socket.join(room);
     resetUnread(socket.user, room);
     socket.emit("history", roomMsgs(room).slice(-100));
+    emitReadReceipts(room, socket.user);
   });
   socket.on("channel-open", ({ channelId }) => {
     if (!ensureAuth()) return;
@@ -701,9 +716,19 @@ io.on("connection", (socket) => {
     const ch = s.channels.find((c) => c.id === channelId);
     socket.emit("history", roomMsgs(room).slice(-100));
     socket.emit("channel-info", { serverId: sid, channelId, name: ch ? ch.name : "", serverName: s.name });
+    emitReadReceipts(room, socket.user);
   });
 
   socket.on("typing", ({ on }) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("typing", { from: users[socket.user].displayName, user: socket.user, on: !!on }); });
+  socket.on("sound", ({ url, custom }) => { if (ensureAuth() && socket.activeRoom && canPost(socket.activeRoom, socket.user)) io.to(socket.activeRoom).emit("sound", { url, custom: !!custom }); });
+  socket.on("read", ({ ids }) => {
+    if (!ensureAuth() || !socket.activeRoom) return;
+    const arr = roomMsgs(socket.activeRoom);
+    const idSet = new Set((ids || []));
+    const touched = [];
+    arr.forEach((m) => { if (idSet.has(m.id) && m.user && !m.deleted) { m.readBy = m.readBy || []; if (!m.readBy.includes(socket.user)) { m.readBy.push(socket.user); touched.push(m.id); } } });
+    if (touched.length) { scheduleSaveHistory(); io.to(socket.activeRoom).emit("read", { user: socket.user, ids: touched }); }
+  });
 
   socket.on("message", (text, replyTo) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;

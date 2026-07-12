@@ -117,6 +117,9 @@
     { name: "Mesh", value: "radial-gradient(40% 40% at 15% 20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%), radial-gradient(45% 45% at 85% 80%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%), var(--bg)" },
     { name: "Glow", value: "radial-gradient(70% 55% at 50% 120%, color-mix(in srgb, var(--accent) 22%, var(--bg)), var(--bg) 70%)" },
     { name: "Smoke", value: "radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg) 65%)" },
+    { name: "Aurora Flow", value: "linear-gradient(120deg, color-mix(in srgb, var(--accent) 16%, var(--bg)), color-mix(in srgb, var(--accent-2) 12%, transparent) 50%, color-mix(in srgb, var(--accent) 16%, var(--bg)) 100%) 0 0 / 220% 100%, var(--bg)", animated: true },
+    { name: "Drift", value: "radial-gradient(40% 50% at 20% 20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%), radial-gradient(45% 45% at 80% 80%, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 70%) 0 0 / 180% 180%, var(--bg)", animated: true },
+    { name: "Waves", value: "repeating-radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--accent) 10%, transparent) 0 22px, transparent 22px 46px) 0 0 / 100% 100%, var(--bg)", animated: true },
   ];
   const DEFAULTS = {
     theme: "midnight", accent: "#5865f2", accent2: "", gradient: true,
@@ -158,6 +161,8 @@
     root.setAttribute("data-layout", s.layout);
     root.setAttribute("data-anim", s.animations ? "on" : "off");
     root.setAttribute("data-glass", s.glass ? "on" : "off");
+    const msg = document.getElementById("messages");
+    if (msg) { msg.classList.remove("bg-anim-aurora", "bg-anim-drift", "bg-anim-waves"); if (bg.animated && s.animations) msg.classList.add("bg-anim-" + (bg.name === "Aurora Flow" ? "aurora" : bg.name === "Drift" ? "drift" : bg.name === "Waves" ? "waves" : "aurora")); }
     applyCustomCss(s.customCss);
   }
 
@@ -309,6 +314,8 @@
   }
   $("authBtn").onclick = doAuth;
   [$("authUser"), $("authPass"), $("authDisp"), $("authEmail")].forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth(); }));
+  const passToggle = $("authPassToggle"), passInput = $("authPass");
+  if (passToggle && passInput) passToggle.onclick = () => { const t = passInput.type === "password"; passInput.type = t ? "text" : "password"; passToggle.innerHTML = t ? '<svg class="icon"><use href="#icon-mic"/></svg>' : '<svg class="icon"><use href="#icon-mic-off"/></svg>'; };
 
   function enterApp(profile) {
     authEl.classList.add("hidden");
@@ -752,11 +759,18 @@
       const time = document.createElement("div"); time.className = "time"; time.textContent = new Date(m.ts || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       wrap.append(author, bubble, time);
       renderReactions(el, wrap, m);
+      if (mine) {
+        const foot = document.createElement("div"); foot.className = "msg-foot";
+        const read = m.readBy && m.readBy.length > 0;
+        foot.innerHTML = '<span class="read-tick' + (read ? " read" : "") + '"><svg class="icon"><use href="#icon-check"/></svg></span><span class="read-label">' + (read ? "Read" : "Sent") + "</span>";
+        wrap.appendChild(foot);
+      }
       el.append(wrap);
       const tools = document.createElement("div"); tools.className = "msg-actions";
       tools.innerHTML =
         '<button class="msg-act" data-act="react" title="React" aria-label="React"><svg class="icon"><use href="#icon-emoji"/></svg></button>' +
         '<button class="msg-act" data-act="reply" title="Reply" aria-label="Reply"><svg class="icon"><use href="#icon-reply"/></svg></button>' +
+        (mine ? '<button class="msg-act" data-act="edit" title="Edit" aria-label="Edit"><svg class="icon"><use href="#icon-note"/></svg></button>' : '') +
         (mine ? '<button class="msg-act danger" data-act="delete" title="Delete" aria-label="Delete"><svg class="icon"><use href="#icon-trash"/></svg></button>' : '') +
         '<button class="msg-act" data-act="more" title="More" aria-label="More"><svg class="icon"><use href="#icon-more"/></svg></button>';
       el.appendChild(tools);
@@ -849,8 +863,8 @@
     else if (e.key === "Escape" && replyingTo) { e.preventDefault(); clearReply(); }
   });
 
-  socket.on("history", (msgs) => { clearReply(); messagesEl.innerHTML = ""; lastDay = ""; msgs.forEach((m) => appendMessage(m)); });
-  socket.on("message", (m) => appendMessage(m));
+  socket.on("history", (msgs) => { clearReply(); messagesEl.innerHTML = ""; lastDay = ""; msgs.forEach((m) => appendMessage(m)); markSeenAll(); });
+  socket.on("message", (m) => { appendMessage(m); markSeenAll(); });
   socket.on("deleted", ({ id, deleted }) => {
     const el = [...messagesEl.children].find((c) => c.dataset.id === id);
     if (!el) return;
@@ -864,7 +878,57 @@
     if (el._msg) el._msg.reactions = reactions;
     if (el._fillReactions) el._fillReactions();
   });
+  socket.on("edited", ({ id, text, edited, history }) => {
+    const el = [...messagesEl.children].find((c) => c.dataset.id === id); if (!el || !el._msg) return;
+    el._msg.text = text; el._msg.edited = edited; el._msg.history = history;
+    const bubble = el.querySelector(".bubble:not(.media)"); if (bubble) { bubble.innerHTML = renderText(text); if (edited) { const ed = document.createElement("span"); ed.className = "edited-tag"; ed.textContent = "(edited)"; bubble.appendChild(ed); } }
+  });
+  socket.on("read", ({ user, ids }) => {
+    (ids || []).forEach((id) => {
+      const el = [...messagesEl.children].find((c) => c.dataset.id === id); if (!el || !el._msg) return;
+      el._msg.readBy = el._msg.readBy || []; if (!el._msg.readBy.includes(user)) el._msg.readBy.push(user);
+      const tick = el.querySelector(".read-tick"); const lab = el.querySelector(".read-label");
+      if (tick) { tick.classList.add("read"); }
+      if (lab) lab.textContent = "Read";
+    });
+  });
   socket.on("channel-info", () => updateHeader());
+
+  // Mark my own messages as seen by the current peer/room
+  function markSeenAll() {
+    if (!socket.activeRoom) return;
+    const ids = [];
+    [...messagesEl.children].forEach((el) => {
+      if (el._msg && el._msg.user !== myUser) ids.push(el._msg.id);
+    });
+    if (ids.length) socket.emit("read", { ids });
+  }
+  // In-place edit
+  function beginEdit(el) {
+    const m = el._msg; if (!m || m.kind) return;
+    const wrap = el.querySelector(".bubble-wrap"); const bubble = el.querySelector(".bubble:not(.media)"); if (!wrap || !bubble) return;
+    const ta = document.createElement("textarea"); ta.className = "edit-area"; ta.value = m.text || ""; ta.maxLength = 4000;
+    bubble.replaceWith(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+    const commit = (save) => {
+      if (save && ta.value.trim()) { socket.emit("edit", { id: m.id, text: ta.value.trim() }); }
+      else { const nb = document.createElement("div"); nb.className = "bubble"; nb.innerHTML = renderText(m.text || ""); if (m.edited) { const ed = document.createElement("span"); ed.className = "edited-tag"; ed.textContent = "(edited)"; nb.appendChild(ed); } ta.replaceWith(nb); }
+    };
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commit(true); }
+      else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+    });
+    ta.addEventListener("blur", () => commit(true));
+  }
+  // Message action toolbar delegation
+  messagesEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".msg-act"); if (!btn) return;
+    const el = e.target.closest(".msg"); if (!el) return;
+    const act = btn.dataset.act; const m = el._msg;
+    if (act === "react") { const b = el.querySelector(".react-add"); if (b) b.click(); else if (window.BuddyFeatures) window.BuddyFeatures.showEmoji("react", m.id, btn); }
+    else if (act === "reply") { if (m && m.id) startReply(m.id); }
+    else if (act === "edit") { beginEdit(el); }
+    else if (act === "delete") { if (m && m.id && confirm("Delete this message?")) socket.emit("delete", { id: m.id }); }
+  });
 
   // ====================================================================
   //  PROFILE EDITING

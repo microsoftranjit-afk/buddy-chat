@@ -300,6 +300,71 @@
   }
   function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
+  // ============================================================ SOUNDBOARD
+  const SB_SOUNDS = [
+    { id: "airhorn", name: "Air Horn", f: (c, t) => { tone(c, t, 180, 0.18, "sawtooth"); tone(c, t + 0.06, 120, 0.18, "square"); } },
+    { id: "ping", name: "Ping", f: (c, t) => { tone(c, t, 880, 0.12); tone(c, t + 0.08, 1320, 0.12); } },
+    { id: "drum", name: "Drum", f: (c, t) => { tone(c, t, 90, 0.22, "sine"); } },
+    { id: "coin", name: "Coin", f: (c, t) => { tone(c, t, 988, 0.07); tone(c, t + 0.07, 1319, 0.18); } },
+    { id: "laser", name: "Laser", f: (c, t) => { slide(c, t, 1400, 400, 0.22); } },
+    { id: "victory", name: "Victory", f: (c, t) => { [523, 659, 784, 1047].forEach((fq, i) => tone(c, t + i * 0.09, fq, 0.16)); } },
+    { id: "error", name: "Error", f: (c, t) => { tone(c, t, 220, 0.12, "square"); tone(c, t + 0.1, 180, 0.12, "square"); } },
+    { id: "tada", name: "Tada", f: (c, t) => { slide(c, t, 600, 1200, 0.25); tone(c, t + 0.2, 1568, 0.16); } },
+  ];
+  function tone(ctx, t, freq, dur, type) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type || "sine"; o.frequency.value = freq; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02); }
+  function slide(ctx, t, f1, f2, dur) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sawtooth"; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02); }
+  let sbCtx = null;
+  function playSound(id) { try { if (!sbCtx) sbCtx = new (window.AudioContext || window.webkitAudioContext)(); const c = sbCtx, t = c.currentTime; const s = SB_SOUNDS.find((x) => x.id === id); if (s) s.f(c, t); } catch {} }
+  function playUploaded(url) { try { const a = new Audio(url); a.play().catch(() => {}); } catch {} }
+  // Play sounds sent in the room
+  socket.on("sound", ({ url, custom }) => { if (window.__muted) return; custom ? playUploaded(url) : playSound(url); });
+
+  const sbBtn = ce("button", "icon-btn", IC("music")); sbBtn.title = "Soundboard"; sbBtn.id = "sbBtn";
+  headerTools.appendChild(sbBtn);
+  const voiceBtn = ce("button", "icon-btn", IC("video")); voiceBtn.title = "Voice lobby"; voiceBtn.id = "voiceBtn";
+  headerTools.appendChild(voiceBtn);
+  const soundPanel = ce("div", "soundboard hidden");
+  function renderSoundboard() { soundPanel.innerHTML = ""; SB_SOUNDS.forEach((s) => { const b = ce("button", "sb-btn", s.name); b.onclick = () => { playSound(s.id); socket.emit("sound", { url: s.id, custom: false }); soundPanel.classList.add("hidden"); }; soundPanel.appendChild(b); }); const up = ce("label", "sb-btn", "＋ Upload"); const inp = ce("input"); inp.type = "file"; inp.accept = "audio/*"; inp.style.display = "none"; inp.onchange = () => { const f = inp.files && inp.files[0]; if (!f) return; const fd = new FormData(); fd.append("file", f); fetch("/api/sound", { method: "POST", headers: { Authorization: "Bearer " + (localStorage.getItem("buddy-token") || "") }, body: fd }).then((r) => r.json()).then((d) => { if (d.ok) { playUploaded(d.url); socket.emit("sound", { url: d.url, custom: true }); } else flash(d.error || "Upload failed", "err"); }).catch(() => flash("Upload failed", "err")); }; up.appendChild(inp); b_on(up, () => inp.click()); soundPanel.appendChild(up); }
+  function b_on(el, fn) { el.style.cursor = "pointer"; el.addEventListener("click", fn); }
+  sbBtn.onclick = () => { if (soundPanel.classList.contains("hidden")) renderSoundboard(); soundPanel.classList.toggle("hidden"); };
+  root.appendChild(soundPanel);
+
+  // ============================================================ LINK EMBEDS + REACTION HOVER
+  // Patch appendMessage to add link embeds
+  const origAppend = B.appendMessage;
+  B.appendMessage = function (m) {
+    origAppend(m);
+    try {
+      if (m && !m.kind && m.text) {
+        const urls = (m.text.match(/https?:\/\/[^\s]+/g) || []).filter((u) => !/\.(png|jpe?g|gif|webp|mp4|webm)(\?|$)/i.test(u));
+        if (urls[0]) {
+          const el = [...document.getElementById("messages").children].find((c) => c.dataset.id === m.id);
+          const bubble = el && el.querySelector(".bubble:not(.media)");
+          if (el && bubble && !el.querySelector(".link-embed")) {
+            const u = new URL(urls[0]);
+            const card = ce("a", "link-embed"); card.href = urls[0]; card.target = "_blank"; card.rel = "noopener";
+            card.innerHTML = '<span class="le-fav" style="background:#eee">' + (u.hostname.replace(/^www\./, "")[0] || "🔗") + '</span><span class="le-meta"><span class="le-domain">' + u.hostname.replace(/^www\./, "") + '</span><span class="le-url">' + (u.pathname === "/" ? "Open link" : u.pathname) + "</span></span>";
+            bubble.parentNode.insertBefore(card, bubble.nextSibling);
+          }
+        }
+      }
+    } catch {}
+  };
+  // Reaction tooltip
+  const rtTip = ce("div", "rt-tip hidden"); root.appendChild(rtTip);
+  document.getElementById("messages").addEventListener("mouseover", (e) => {
+    const chip = e.target.closest && e.target.closest(".react-chip"); if (!chip) return;
+    const msgEl = chip.closest(".msg"); const m = msgEl && msgEl._msg; if (!m || !m.reactions) return;
+    const emoji = chip.querySelector(".react-emoji") && chip.querySelector(".react-emoji").textContent;
+    const users = (m.reactions[emoji] || []).map((u) => (B.profiles.get(u) || {}).displayName || u);
+    if (!users.length) return;
+    rtTip.textContent = users.slice(0, 12).join(", ") + (users.length > 12 ? "…" : "") + " reacted with " + emoji;
+    rtTip.classList.remove("hidden");
+    const r = chip.getBoundingClientRect(); rtTip.style.left = Math.min(r.left, window.innerWidth - 220) + "px"; rtTip.style.top = (r.bottom + 6) + "px";
+  });
+  document.getElementById("messages").addEventListener("mouseout", (e) => { if (e.target.closest && e.target.closest(".react-chip")) rtTip.classList.add("hidden"); });
+
+
   // ============================================================ FORWARD MODAL
   const fwdPanel = ce("div", "modal hidden");
   fwdPanel.innerHTML = '<div class="modal-card"><h3>Forward message</h3><div id="fwdList" class="fwd-list"></div><button id="fwdClose" class="reset-btn">Cancel</button></div>';
@@ -525,4 +590,87 @@
   }
 
   if ($("app") && !$("app").classList.contains("hidden")) flash("Discord features loaded: emoji, reactions, pins, polls, slash commands, search, roles, mentions, bookmarks & more.");
+
+  // ============================================================ VOICE LOBBY (mesh group call on call2 relay)
+  const voiceRoom = { active: false, callId: null, peers: {}, localStream: null, mic: true, cam: false };
+  const vrPanel = ce("div", "voice-lobby hidden");
+  vrPanel.innerHTML =
+    '<div class="vl-head"><svg class="icon"><use href="#icon-video"/></svg><span class="vl-title">Voice Lobby</span>' +
+    '<button id="vlClose" class="icon-btn"><svg class="icon"><use href="#icon-close"/></svg></button></div>' +
+    '<div id="vlGrid" class="vl-grid"></div>' +
+    '<div class="vl-bar">' +
+      '<button id="vlMic" class="round" title="Mic"><svg class="icon"><use href="#icon-mic"/></svg></button>' +
+      '<button id="vlCam" class="round" title="Camera"><svg class="icon"><use href="#icon-video"/></svg></button>' +
+      '<button id="vlLeave" class="round hangup" title="Leave"><svg class="icon"><use href="#icon-phone-off"/></svg></button>' +
+    '</div>';
+  root.appendChild(vrPanel);
+  voiceBtn.onclick = () => { if (voiceRoom.active) leaveVoice(); else joinVoice(); };
+  $("vlClose").onclick = () => vrPanel.classList.add("hidden");
+  $("vlLeave").onclick = leaveVoice;
+  $("vlMic").onclick = () => { voiceRoom.mic = !voiceRoom.mic; if (voiceRoom.localStream) voiceRoom.localStream.getAudioTracks().forEach((t) => (t.enabled = voiceRoom.mic)); $("vlMic").classList.toggle("off", !voiceRoom.mic); };
+  $("vlCam").onclick = async () => { voiceRoom.cam = !voiceRoom.cam; if (!voiceRoom.localStream) return; const vt = voiceRoom.localStream.getVideoTracks(); if (voiceRoom.cam && !vt.length) { try { const cam = await navigator.mediaDevices.getUserMedia({ video: true }); cam.getVideoTracks().forEach((t) => voiceRoom.localStream.addTrack(t)); } catch {} } else { vt.forEach((t) => (t.enabled = voiceRoom.cam)); } [...Object.values(voiceRoom.peers)].forEach((p) => { if (p.pc) voiceRoom.localStream.getTracks().forEach((t) => p.pc.addTrack(t, voiceRoom.localStream)); }); renderVoiceGrid(); };
+  function vrRoomId() { const r = B.currentRoom(); return r ? r.replace(/[^a-z0-9]/gi, "_") : null; }
+  async function joinVoice() {
+    const id = vrRoomId(); if (!id) return flash("Open a server channel or DM first.", "err");
+    voiceRoom.active = true; voiceRoom.callId = id;
+    try { voiceRoom.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: voiceRoom.cam }); } catch { try { voiceRoom.localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return flash("Microphone access denied.", "err"); } }
+    voiceRoom.localStream.getAudioTracks().forEach((t) => (t.enabled = voiceRoom.mic));
+    vrPanel.classList.remove("hidden"); renderVoiceGrid();
+    socket.emit("call2:join", { callId: id });
+    flash("Joined the voice lobby.");
+  }
+  function leaveVoice() {
+    if (!voiceRoom.active) return;
+    socket.emit("call2:leave", { callId: voiceRoom.callId });
+    Object.values(voiceRoom.peers).forEach((p) => { try { p.pc && p.pc.close(); } catch {} });
+    voiceRoom.peers = {};
+    if (voiceRoom.localStream) voiceRoom.localStream.getTracks().forEach((t) => t.stop());
+    voiceRoom.localStream = null; voiceRoom.active = false; voiceRoom.callId = null;
+    vrPanel.classList.add("hidden"); voiceBtn.classList.remove("active");
+  }
+  function addPeer(peerId, name, user) {
+    const pc = new RTCPeerConnection({ iceServers: (window.BUDDY_ICE && window.BUDDY_ICE.iceServers) || [{ urls: "stun:stun.l.google.com:19302" }] });
+    const p = { pc, name: name || user || "Friend", user, stream: null, video: null };
+    voiceRoom.peers[peerId] = p;
+    if (voiceRoom.localStream) voiceRoom.localStream.getTracks().forEach((t) => pc.addTrack(t, voiceRoom.localStream));
+    pc.onicecandidate = (e) => { if (e.candidate) socket.emit("call2:signal", { callId: voiceRoom.callId, to: peerId, signal: { candidate: e.candidate } }); };
+    pc.ontrack = (e) => { p.stream = e.streams[0]; renderVoiceGrid(); };
+    p.pc = pc;
+    return p;
+  }
+  function renderVoiceGrid() {
+    const grid = $("vlGrid"); if (!grid) return; grid.innerHTML = "";
+    const me = ce("div", "vl-tile me");
+    me.innerHTML = '<div class="vl-av">' + (B.myName ? B.myName[0] : "•") + '</div><div class="vl-name">You' + (voiceRoom.mic ? "" : " 🔇") + '</div>';
+    if (voiceRoom.localStream && voiceRoom.cam) { const v = ce("video"); v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = voiceRoom.localStream; me.insertBefore(v, me.firstChild); }
+    grid.appendChild(me);
+    Object.values(voiceRoom.peers).forEach((p) => {
+      const t = ce("div", "vl-tile");
+      if (p.stream) { const v = ce("video"); v.autoplay = true; v.playsInline = true; v.srcObject = p.stream; t.appendChild(v); }
+      else { const a = ce("div", "vl-av", (p.name || "?")[0]); t.appendChild(a); }
+      t.appendChild(ce("div", "vl-name", p.name || "Friend"));
+      grid.appendChild(t);
+    });
+  }
+  socket.on("call2:peer", async ({ from, fromName, fromUser }) => {
+    if (!voiceRoom.active) return;
+    const p = addPeer(from, fromName, fromUser);
+    try { const offer = await p.pc.createOffer(); await p.pc.setLocalDescription(offer); socket.emit("call2:signal", { callId: voiceRoom.callId, to: from, signal: { sdp: offer } }); } catch {}
+  });
+  socket.on("call2:signal", async ({ from, signal }) => {
+    if (!voiceRoom.active || !signal) return;
+    let p = voiceRoom.peers[from];
+    if (!p) p = addPeer(from, "Friend");
+    try {
+      if (signal.sdp) {
+        await p.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+        if (signal.sdp.type === "offer") { const ans = await p.pc.createAnswer(); await p.pc.setLocalDescription(ans); socket.emit("call2:signal", { callId: voiceRoom.callId, to: from, signal: { sdp: ans } }); }
+      } else if (signal.candidate) { try { await p.pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch {} }
+    } catch {}
+  });
+  socket.on("call2:left", ({ from }) => { if (voiceRoom.peers[from]) { try { voiceRoom.peers[from].pc.close(); } catch {} delete voiceRoom.peers[from]; renderVoiceGrid(); } });
+  socket.on("disconnect", () => { if (voiceRoom.active) leaveVoice(); });
+
+  // Expose a couple of helpers for client.js (message toolbar, etc.)
+  window.BuddyFeatures = { showEmoji: showEmoji, runSlash: runSlash };
 })();

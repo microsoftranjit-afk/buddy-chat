@@ -1,0 +1,13 @@
+{
+  "name": "Buddy",
+  "short_name": "Buddy",
+  "description": "Servers, DMs, voice & video with friends — endlessly customizable.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#16171a",
+  "theme_color": "#5865f2",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -3,8 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#5865f2" />
   <title>Buddy</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   <link rel="stylesheet" href="style.css" />
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+  </script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -51,30 +61,64 @@
   <div id="auth" class="auth">
     <div class="auth-bg"></div>
     <div class="auth-dots"></div>
-    <div class="auth-card">
-      <div class="brand">
-        <svg class="brand-logo"><use href="#icon-chat"/></svg>
-        <h1>Buddy</h1>
-        <p class="brand-sub">Servers, DMs &amp; calls with your friends</p>
-      </div>
-      <div class="auth-tabs">
-        <button id="tabLogin" class="active">Log in</button>
-        <button id="tabSignup">Sign up</button>
-      </div>
-      <div id="authError" class="auth-error hidden"></div>
-      <label class="field"><span>Username or email</span><input id="authUser" type="text" placeholder="e.g. alex" maxlength="40" autocomplete="username" /></label>
-      <label class="field hidden" id="emailField"><span>Email</span><input id="authEmail" type="email" placeholder="you@example.com" maxlength="80" autocomplete="email" /></label>
-      <label class="field hidden" id="dispField"><span>Display name</span><input id="authDisp" type="text" placeholder="e.g. Alex" maxlength="32" autocomplete="off" /></label>
-      <label class="field"><span>Password</span><input id="authPass" type="password" placeholder="••••••" maxlength="200" autocomplete="current-password" /></label>
-      <button id="authBtn" class="primary-btn">Log in</button>
-      <div class="auth-divider"><span>or</span></div>
-      <a id="downloadBtn" class="dl-btn" href="/download">
-        <svg class="icon"><use href="#icon-download"/></svg>
-        <span>Download Buddy for Windows</span>
-      </a>
+    <div class="auth-split">
+      <!-- Brand / hero -->
+      <aside class="auth-hero">
+        <div class="hero-orb o1"></div>
+        <div class="hero-orb o2"></div>
+        <div class="hero-orb o3"></div>
+        <div class="hero-content">
+          <div class="hero-brand">
+            <svg class="brand-logo"><use href="#icon-chat"/></svg>
+            <span>Buddy</span>
+          </div>
+          <h1 class="hero-title">Your space to talk,<br/>laugh &amp; hang out.</h1>
+          <p class="hero-sub">Servers, DMs, voice &amp; video — endlessly customizable. Make it yours.</p>
+          <ul class="hero-feats">
+            <li><svg class="icon"><use href="#icon-hash"/></svg> Join topic servers with friends</li>
+            <li><svg class="icon"><use href="#icon-video"/></svg> Crystal-clear voice &amp; video</li>
+            <li><svg class="icon"><use href="#icon-star"/></svg> 13 themes &amp; your own CSS</li>
+          </ul>
+        </div>
+        <div class="hero-quote">“The coziest little chat app.” — probably you</div>
+      </aside>
+
+      <!-- Card -->
+      <div class="auth-card">
+        <div class="brand brand-sm">
+          <svg class="brand-logo"><use href="#icon-chat"/></svg>
+          <h1>Buddy</h1>
+        </div>
+        <div class="auth-tabs">
+          <button id="tabLogin" class="active">Log in</button>
+          <button id="tabSignup">Sign up</button>
+        </div>
+        <div id="authError" class="auth-error hidden"></div>
+        <label class="field"><span>Username or email</span>
+          <span class="field-wrap"><input id="authUser" type="text" placeholder="e.g. alex" maxlength="40" autocomplete="username" /><svg class="field-ico"><use href="#icon-user-plus"/></svg></span>
+        </label>
+        <label class="field hidden" id="emailField"><span>Email</span>
+          <span class="field-wrap"><input id="authEmail" type="email" placeholder="you@example.com" maxlength="80" autocomplete="email" /><svg class="field-ico"><use href="#icon-note"/></svg></span>
+        </label>
+        <label class="field hidden" id="dispField"><span>Display name</span>
+          <span class="field-wrap"><input id="authDisp" type="text" placeholder="e.g. Alex" maxlength="32" autocomplete="off" /><svg class="field-ico"><use href="#icon-star"/></svg></span>
+        </label>
+        <label class="field"><span>Password</span>
+          <span class="field-wrap">
+            <input id="authPass" type="password" placeholder="••••••" maxlength="200" autocomplete="current-password" />
+            <button type="button" class="field-ico btn-ico" id="authPassToggle" title="Show password"><svg class="icon"><use href="#icon-mic-off"/></svg></button>
+          </span>
+        </label>
+        <button id="authBtn" class="primary-btn">Log in</button>
+        <div class="auth-divider"><span>or</span></div>
+        <a id="downloadBtn" class="dl-btn" href="/download">
+          <svg class="icon"><use href="#icon-download"/></svg>
+          <span>Download Buddy for Windows</span>
+        </a>
         <p class="dl-note">Free desktop app · Windows 10/11</p>
         <p class="dl-note" id="authVersion"></p>
         <p class="auth-foot">Messages and calls stay between you and your friends.</p>
+      </div>
     </div>
   </div>
 
