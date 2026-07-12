@@ -487,8 +487,9 @@
   $("pmReport").onclick = () => { if (!profileTarget) return; const u = profileTarget; closeProfile(); reportPrompt("person", u); };
 
   // Add friend (sends request)
-  document.querySelector(".add-friend").addEventListener("click", (e) => { if (e.target.closest(".field-icon")) addFriend(); });
-  $("friendInput").addEventListener("keydown", (e) => { if (e.key === "Enter") addFriend(); });
+  document.querySelector(".add-friend").addEventListener("click", (e) => { if (e.target.closest(".field-icon, #addFriendBtn, .add-friend-btn")) { e.preventDefault(); addFriend(); } });
+  $("friendInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addFriend(); } });
+  const addBtn = $("addFriendBtn"); if (addBtn) addBtn.onclick = (e) => { e.preventDefault(); addFriend(); };
   async function addFriend() {
     const f = $("friendInput").value.trim(); if (!f) return;
     const res = await api("/api/friends/request", { friend: f }, true);
