@@ -144,6 +144,14 @@
   }
   let ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
   fetch("/api/config").then((r) => r.json()).then((d) => { if (d && d.iceServers) ICE = d; }).catch(() => {});
+  async function refreshIce() {
+    try {
+      const r = await fetch("/api/turn"); const d = await r.json();
+      if (d && Array.isArray(d.iceServers) && d.iceServers.length) {
+        ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }].concat(d.iceServers) };
+      }
+    } catch {}
+  }
 
   // ====================================================================
   //  AUTH
@@ -947,6 +955,7 @@
     callAvatar.innerHTML = ""; if (activePeer) callAvatar.appendChild(avatarEl(activePeer.displayName, activePeer.pic)); callAvatar.classList.remove("hidden");
     if (devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {});
     try { refreshDevices(); } catch {}
+    await refreshIce();
     peer = makePeer();
     localStream.getTracks().forEach((t) => peer.addTrack(t, localStream));
     if (callFailTimer) { clearTimeout(callFailTimer); callFailTimer = null; }
@@ -959,7 +968,7 @@
   async function handleOffer(offer) {
     if (!inCall) await startCall(false);
     callStatus.textContent = "Connected";
-    if (!peer) { peer = makePeer(); localStream.getTracks().forEach((t) => peer.addTrack(t, localStream)); }
+    if (!peer) { await refreshIce(); peer = makePeer(); localStream.getTracks().forEach((t) => peer.addTrack(t, localStream)); }
     try { await peer.setRemoteDescription(new RTCSessionDescription(offer)); await flushCandidates(); const answer = await peer.createAnswer(); await peer.setLocalDescription(answer); socket.emit("call:answer", answer); } catch (e) { console.error(e); }
   }
   async function flushCandidates() { while (pendingCandidates.length) { try { await peer.addIceCandidate(pendingCandidates.shift()); } catch (e) {} } }

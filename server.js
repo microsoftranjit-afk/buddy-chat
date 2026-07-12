@@ -188,9 +188,27 @@ app.get("/api/version", (req, res) => {
   res.json({ version: v, name: "Buddy" });
 });
 
-app.get("/api/config", (req, res) => {
+// ---- TURN relay via Metered.ca (dynamic, short-lived credentials) ----
+const METERED_KEY = process.env.METERED_API_KEY || "";
+const METERED_TURN_URL = "https://buddy-chat.metered.live/api/v1/turn/credentials";
+let turnCache = { at: 0, servers: [] };
+async function getTurnServers() {
+  if (!METERED_KEY) return [];
+  if (turnCache.servers.length && Date.now() - turnCache.at < 60 * 60 * 1000) return turnCache.servers;
+  try {
+    const r = await fetch(METERED_TURN_URL + "?apiKey=" + encodeURIComponent(METERED_KEY));
+    if (!r.ok) throw new Error("turn " + r.status);
+    const data = await r.json();
+    const arr = Array.isArray(data) ? data : (data && data.iceServers) || [];
+    turnCache = { at: Date.now(), servers: arr };
+    return arr;
+  } catch (e) { console.error("TURN fetch failed:", e.message); return turnCache.servers || []; }
+}
+app.get("/api/turn", async (req, res) => { res.json({ iceServers: await getTurnServers().catch(() => []) }); });
+app.get("/api/config", async (req, res) => {
   const ice = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
   if (process.env.TURN_URL) ice.push({ urls: process.env.TURN_URL.split(",").map((s) => s.trim()).filter(Boolean), username: process.env.TURN_USER || "", credential: process.env.TURN_PASS || "" });
+  try { (await getTurnServers()).forEach((s) => ice.push(s)); } catch {}
   res.json({ iceServers: ice });
 });
 
