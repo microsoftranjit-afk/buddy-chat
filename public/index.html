@@ -110,7 +110,11 @@
 
       <!-- Server view -->
       <div id="serverView" class="side-view hidden">
-        <div class="side-head"><span id="serverName">Server</span></div>
+        <div class="side-head"><span id="serverName">Server</span><button id="serverActionsBtn" class="icon-btn" title="Server options"><svg class="icon"><use href="#icon-more"/></svg></button></div>
+        <div id="serverMenu" class="server-menu hidden">
+          <button id="serverLeave" class="sm-p">Leave server</button>
+          <button id="serverReport" class="sm-p" style="color:#e2575b">Report server</button>
+        </div>
         <div class="side-scroll">
           <div class="cat">Text Channels <button id="addChannelBtn" class="cat-add" title="Create channel"><svg class="icon"><use href="#icon-plus"/></svg></button></div>
           <div id="channelList" class="channels"></div>
@@ -213,6 +217,14 @@
       </div>
     </div>
 
+    <!-- Update banner (Electron only) -->
+    <div id="updateBanner" class="update-banner hidden">
+      <svg class="icon"><use href="#icon-download"/></svg>
+      <span id="updateText">Update to the latest version of Buddy</span>
+      <button id="updateBtn" class="primary-btn">Update now</button>
+      <button id="updateClose" class="icon-btn" title="Dismiss"><svg class="icon"><use href="#icon-close"/></svg></button>
+    </div>
+
     <!-- Settings drawer -->
     <aside id="settings" class="settings hidden">
       <div class="settings-head">
@@ -244,6 +256,20 @@
           <label class="switch-row"><span>Compact messages</span><span class="switch"><input type="checkbox" id="toggleCompact" /><span class="slider-sw"></span></span></label>
           <label class="switch-row"><span>Always show timestamps</span><span class="switch"><input type="checkbox" id="toggleTimestamps" /><span class="slider-sw"></span></span></label>
           <label class="switch-row"><span>Sound on new message</span><span class="switch"><input type="checkbox" id="toggleSound" /><span class="slider-sw"></span></span></label>
+        </section>
+
+        <section class="set-section">
+          <h3>Blocked users</h3>
+          <div id="blockedList" class="blocked-list">
+            <p class="set-empty" id="blockedEmpty">You haven't blocked anyone.</p>
+          </div>
+        </section>
+
+        <section class="set-section">
+          <h3>Update</h3>
+          <p class="set-note" id="updateNote">Updates keep your account, friends and messages. You'll be notified here when a new version is available.</p>
+          <button id="checkUpdateBtn" class="reset-btn" style="margin-top:8px">Check for updates</button>
+          <p class="set-version" id="updateStatus"></p>
         </section>
 
         <section class="set-section">
@@ -327,6 +353,10 @@
       </div>
       <div class="profile-actions">
         <button id="pmMessage" class="primary-btn">Message</button>
+        <button id="pmRemove" class="reset-btn" style="border-color:#e2575b;color:#e2575b">Remove friend</button>
+        <button id="pmBlock" class="reset-btn" style="border-color:#e2575b;color:#e2575b">Block</button>
+        <button id="pmUnblock" class="reset-btn">Unblock</button>
+        <button id="pmReport" class="reset-btn">Report</button>
       </div>
     </div>
   </div>
@@ -342,6 +372,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Toasts -->
+  <div id="toasts" class="toasts"></div>
 
   <script src="vendor/socket.io.min.js"></script>
   <script src="client.js"></script>

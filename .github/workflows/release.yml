@@ -54,5 +54,5 @@ jobs:
           replacesArtifacts: true
           removeArtifacts: true
           prerelease: false
-          artifacts: "dist/Buddy-Setup.exe"
+          artifacts: "dist/Buddy-Setup.exe,dist/latest.yml,dist/Buddy-Setup.exe.blockmap"
           token: ${{ secrets.GITHUB_TOKEN }}

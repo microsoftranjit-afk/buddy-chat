@@ -437,6 +437,116 @@ html, body {
 .rail-badge { position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 3px solid var(--rail); }
 .channel-badge { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); }
 
+/* ============ ANIMATIONS & UX POLISH ============ */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--online) 55%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+.btn, .primary-btn, .reset-btn, .req-btn, .icon-btn, .round, .rail-item, .friend, .channel, .member, .avatar-btn { transition: filter .15s ease, background .15s ease, transform .1s ease, box-shadow .15s ease, color .15s ease, border-color .15s ease; }
+.primary-btn:hover, .reset-btn:hover, .req-btn:hover, .round:hover, .rail-item:hover, .icon-btn:hover { filter: brightness(1.08); }
+.friend:hover, .channel:hover, .member:hover { background: var(--bg-3); }
+.btn:active, .primary-btn:active, .reset-btn:active { transform: translateY(1px); }
+.friend:active, .channel:active, .member:active { transform: scale(.99); }
+.ondot.online { animation: pulse 2.6s infinite; }
+.msg { animation: rise .16s ease; }
+.modal { animation: fade .18s ease; }
+.modal-card { animation: pop .2s ease; }
+.profile-card { animation: pop .2s ease; }
+.server-menu { animation: slideDown .15s ease; }
+.call-overlay { animation: fade .2s ease; }
+.call-avatar { animation: pop .2s ease; }
+.drop-hint { animation: pop .2s ease; }
+.composer input, .composer .btn { transition: background .15s, box-shadow .15s, border-color .15s; }
+
+/* Server options menu */
+.side-head { position: relative; }
+.server-menu { position: absolute; right: 8px; top: 46px; z-index: 40; background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; padding: 5px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 160px; }
+.server-menu .sm-p { text-align: left; padding: 8px 10px; border-radius: 5px; border: none; background: none; color: var(--text); font-size: 13px; cursor: pointer; }
+.server-menu .sm-p:hover { background: var(--bg-2); }
+
+/* Update banner (Electron only) */
+.update-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 250; display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #000)); color: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.3); font-size: 13px; }
+.update-banner .icon { width: 18px; height: 18px; fill: #fff; stroke: none; flex: 0 0 auto; }
+.update-banner span { flex: 1; font-weight: 600; }
+.update-banner .primary-btn { width: auto; padding: 7px 16px; background: #fff; color: var(--accent); }
+.update-banner .primary-btn:hover { background: #eef; }
+.update-banner .icon-btn { color: #fff; }
+.update-banner .icon-btn:hover { background: rgba(255,255,255,.15); }
+
+/* ============ TOASTS ============ */
+.toasts { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 400; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: max-content; max-width: 92vw; }
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px; border-radius: 10px;
+  background: rgba(30,31,34,.96); color: var(--text);
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+  font-size: 13.5px; font-weight: 500; max-width: 92vw;
+  animation: toastIn .28s cubic-bezier(.2,.9,.3,1.2);
+  backdrop-filter: blur(6px);
+}
+.toast.ok { border-left: 3px solid var(--online); }
+.toast.err { border-left: 3px solid var(--danger); }
+.toast.info { border-left: 3px solid var(--accent); }
+.toast.leaving { animation: toastOut .25s ease forwards; }
+.toast .t-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.toast.ok .t-dot { background: var(--online); }
+.toast.err .t-dot { background: var(--danger); }
+.toast.info .t-dot { background: var(--accent); }
+.toast .t-ico { width: 18px; height: 18px; flex: 0 0 auto; }
+.toast.ok .t-ico { color: var(--online); }
+.toast.err .t-ico { color: var(--danger); }
+.toast.info .t-ico { color: var(--accent); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-12px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes toastOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-8px) scale(.97); } }
+
+/* ============ BLOCKED LIST (Settings) ============ */
+.blocked-list { display: flex; flex-direction: column; gap: 6px; }
+.blocked-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; background: var(--bg-3); animation: slideDown .15s ease; }
+.blocked-row .avatar.small { width: 30px; height: 30px; font-size: 12px; flex: 0 0 auto; }
+.blocked-row .b-meta { min-width: 0; flex: 1; }
+.blocked-row .b-name { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blocked-row .b-sub { font-size: 11px; color: var(--muted); }
+.set-empty { color: var(--muted); font-size: 13px; margin: 0; }
+.set-note { color: var(--muted); font-size: 13px; margin: 0 0 4px; line-height: 1.5; }
+
+/* ============ UPDATE SECTION ============ */
+.update-note { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.update-status { color: var(--accent); font-size: 12px; margin-top: 8px; font-weight: 600; }
+
+/* Smooth view + sidebar transitions */
+.rail-item { transition: border-radius .18s cubic-bezier(.2,.9,.3,1.2), background .15s, color .15s, transform .12s ease, filter .15s; }
+.rail-item:active { transform: scale(.9); }
+.server-list .rail-item { animation: rise .2s ease; }
+.friend, .member, .channel { transition: background .12s ease, color .12s ease, transform .1s ease; }
+.friend:active, .member:active, .channel:active { transform: scale(.985); }
+.profile-modal, .modal { transition: background .2s ease; }
+.req-card { animation: slideDown .2s ease; }
+.me { transition: background .15s ease; }
+.me:hover { background: var(--bg-3); }
+.icon-btn, .avatar-btn { transition: background .15s, color .15s, transform .1s, filter .15s; }
+.avatar-btn:hover { transform: scale(1.06); }
+.avatar { transition: transform .12s ease, filter .15s ease; }
+.avatar:hover { filter: brightness(1.08); }
+
+/* Message hover reveal + entrance polish */
+.msg { transition: background .15s ease; }
+.msg.mine .bubble { background-size: 200% 200%; background-position: 0% 0%; transition: filter .15s ease; }
+.msg.mine .bubble:hover { filter: brightness(1.06); }
+.composer { transition: background .2s ease; }
+
+/* Animated connect pill */
+.conn-pill { transition: background .2s, color .2s; }
+.conn-pill.online .conn-dot { animation: pulse 2.6s infinite; }
+
+/* Sidebar view fade */
+.side-view { animation: fade .18s ease; }
+
+/* Settings sections animate in */
+.set-section { animation: fade .2s ease; }
+
 @media (max-width: 720px) {
   .app { grid-template-columns: 72px 1fr; }
   .sidebar { display: none; }

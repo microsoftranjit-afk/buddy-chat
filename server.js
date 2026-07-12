@@ -60,6 +60,7 @@ for (const k in users) {
   if (!Array.isArray(u.incoming)) u.incoming = [];
   if (!Array.isArray(u.outgoing)) u.outgoing = [];
   if (!Array.isArray(u.servers)) u.servers = [];
+  if (!Array.isArray(u.blocked)) u.blocked = [];
   if (!u.presence) u.presence = "online";
   if (typeof u.status !== "string") u.status = "";
   if (u.activity !== null && typeof u.activity !== "object") u.activity = null;
@@ -281,6 +282,7 @@ app.get("/api/me", (req, res) => {
     friends: (users[uname].friends || []).map(friendView).filter(Boolean),
     requests: { incoming: (users[uname].incoming || []).map(publicProfile).filter(Boolean), outgoing: (users[uname].outgoing || []).map(publicProfile).filter(Boolean) },
     servers: (users[uname].servers || []).map(serverView).filter(Boolean),
+    blocked: users[uname].blocked || [],
   });
 });
 
@@ -336,6 +338,7 @@ app.post("/api/friends/request", (req, res) => {
   if (me.friends.includes(friend)) return res.status(409).json({ error: "You're already friends." });
   if (me.outgoing.includes(friend)) return res.status(409).json({ error: "Friend request already sent." });
   if (me.incoming.includes(friend)) return res.status(409).json({ error: "They already sent you a request." });
+  if (me.blocked.includes(friend) || them.blocked.includes(uname)) return res.status(403).json({ error: "You can't add this user." });
   me.outgoing.push(friend);
   if (!them.incoming.includes(uname)) them.incoming.push(uname);
   saveUsers();
@@ -374,6 +377,52 @@ app.post("/api/friends/remove", (req, res) => {
   if (them) { them.friends = (them.friends || []).filter((f) => f !== uname); them.incoming = (them.incoming || []).filter((f) => f !== uname); them.outgoing = (them.outgoing || []).filter((f) => f !== uname); }
   saveUsers();
   emitStateTo(uname); if (them) emitStateTo(friend);
+  res.json({ ok: true });
+});
+
+// ---- Block / unblock ----
+app.post("/api/friends/block", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const target = norm(req.body && req.body.target);
+  if (!validUser(target) || !users[target]) return res.status(400).json({ error: "Invalid user." });
+  if (target === uname) return res.status(400).json({ error: "You can't block yourself." });
+  const me = users[uname], them = users[target];
+  if (!me.blocked.includes(target)) me.blocked.push(target);
+  me.friends = (me.friends || []).filter((f) => f !== target);
+  them.friends = (them.friends || []).filter((f) => f !== uname);
+  me.incoming = (me.incoming || []).filter((f) => f !== target);
+  them.incoming = (them.incoming || []).filter((f) => f !== uname);
+  me.outgoing = (me.outgoing || []).filter((f) => f !== target);
+  them.outgoing = (them.outgoing || []).filter((f) => f !== uname);
+  saveUsers();
+  emitStateTo(uname); emitStateTo(target);
+  res.json({ ok: true, blocked: me.blocked });
+});
+app.post("/api/friends/unblock", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const target = norm(req.body && req.body.target);
+  const me = users[uname];
+  me.blocked = (me.blocked || []).filter((f) => f !== target);
+  saveUsers();
+  res.json({ ok: true, blocked: me.blocked });
+});
+
+// ---- Reports ----
+const REPORTS_FILE = path.join(DATA_DIR, "reports.json");
+let reports = [];
+try { reports = JSON.parse(fs.readFileSync(REPORTS_FILE, "utf8")); } catch {}
+if (!Array.isArray(reports)) reports = [];
+function saveReports() { try { fs.writeFileSync(REPORTS_FILE, JSON.stringify(reports)); } catch {} }
+app.post("/api/report", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { type, target, reason } = req.body || {};
+  if (!["user", "server"].includes(type)) return res.status(400).json({ error: "Invalid report type." });
+  if (type === "user" && (!validUser(target) || !users[target])) return res.status(400).json({ error: "No such user." });
+  if (type === "server" && !servers[target]) return res.status(400).json({ error: "No such server." });
+  if (type === "user" && target === uname) return res.status(400).json({ error: "You can't report yourself." });
+  reports.push({ by: uname, type, target, reason: String(reason || "").slice(0, 500), ts: Date.now() });
+  if (reports.length > 500) reports = reports.slice(-500);
+  saveReports();
   res.json({ ok: true });
 });
 

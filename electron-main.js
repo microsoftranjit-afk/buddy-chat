@@ -3,13 +3,17 @@ const path = require("path");
 const fs = require("fs");
 const { execFile } = require("child_process");
 
+// Auto-updater (optional — only used in the built desktop app).
+let autoUpdater = null;
+try { autoUpdater = require("electron-updater").autoUpdater; } catch (e) {}
+
 // Default backend. Override with ELECTRON_SERVER_URL (env) or serverUrl (config.json).
 const DEFAULT_SERVER_URL = "https://buddy-chat-bd6c.onrender.com";
 
 function loadConfig() {
   try {
     return JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8"));
-  } catch {
+  } catch (e) {
     return {};
   }
 }
@@ -19,6 +23,22 @@ function resolveServerUrl() {
   const cfg = loadConfig();
   if (cfg && cfg.serverUrl) return cfg.serverUrl;
   return DEFAULT_SERVER_URL;
+}
+
+// Durable login (survives app updates — chat data lives on the server anyway).
+const LOGIN_FILE = path.join(app.getPath("userData"), "login.json");
+function saveLogin(d) {
+  try {
+    fs.writeFileSync(LOGIN_FILE, JSON.stringify({
+      token: (d && d.token) || "",
+      user: (d && d.user) || "",
+      name: (d && d.name) || "",
+      pic: (d && d.pic) || "",
+    }));
+  } catch (e) {}
+}
+function loadLogin() {
+  try { return JSON.parse(fs.readFileSync(LOGIN_FILE, "utf8")); } catch (e) { return null; }
 }
 
 // Optional: run the bundled server locally (offline / dev). Set BUDDY_LOCAL=1.
@@ -81,12 +101,34 @@ function scanGames() {
     const name = found.size ? [...found][0] : null;
     if (name !== currentGame) {
       currentGame = name;
-      try { mainWin.webContents.send("buddy:game", name ? { type: "playing", name } : null); } catch {}
+      try { mainWin.webContents.send("buddy:game", name ? { type: "playing", name } : null); } catch (e) {}
     }
   });
 }
 
 ipcMain.on("buddy:manual", (_e, on) => { manualOverride = !!on; if (!manualOverride) scanGames(); });
+ipcMain.handle("buddy:load-login", () => loadLogin());
+ipcMain.on("buddy:save-login", (_e, d) => saveLogin(d));
+ipcMain.on("buddy:update-download", () => { try { if (autoUpdater) autoUpdater.downloadUpdate(); } catch (e) {} });
+ipcMain.on("buddy:update-install", () => { try { if (autoUpdater) autoUpdater.quitAndInstall(); } catch (e) {} });
+ipcMain.on("buddy:check-updates", () => { try { if (autoUpdater) autoUpdater.checkForUpdates(); } catch (e) {} });
+ipcMain.handle("buddy:app-version", () => { try { return require("./package.json").version; } catch (e) { return ""; } });
+
+function setupAutoUpdater() {
+  if (!autoUpdater) return;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  try {
+    autoUpdater.setFeedURL({ provider: "github", owner: "microsoftranjit-afk", repo: "buddy-chat" });
+  } catch (e) {}
+  autoUpdater.on("checking-for-update", () => { if (mainWin) mainWin.webContents.send("buddy:update-checking"); });
+  autoUpdater.on("update-available", (info) => { if (mainWin) mainWin.webContents.send("buddy:update-available", info && info.version); });
+  autoUpdater.on("update-not-available", () => { if (mainWin) mainWin.webContents.send("buddy:update-latest"); });
+  autoUpdater.on("download-progress", (p) => { if (mainWin) mainWin.webContents.send("buddy:update-progress", p && p.percent); });
+  autoUpdater.on("update-downloaded", () => { if (mainWin) mainWin.webContents.send("buddy:update-downloaded"); });
+  autoUpdater.on("error", (e) => { if (mainWin) mainWin.webContents.send("buddy:update-error", String((e && e.message) || e)); });
+  setTimeout(() => { try { autoUpdater.checkForUpdates(); } catch (e) {} }, 5000);
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -136,6 +178,7 @@ app.whenReady().then(() => {
     currentUrl = resolveServerUrl();
     createWindow();
   }
+  setupAutoUpdater();
   scanGames();
   setInterval(scanGames, 8000);
 });

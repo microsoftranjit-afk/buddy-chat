@@ -54,7 +54,7 @@
   function unreadFor(key) { const n = unreadMap[key]; return n ? n : 0; }
 
   // State
-  const state = { friends: [], requests: { incoming: [], outgoing: [] }, servers: [] };
+  const state = { friends: [], requests: { incoming: [], outgoing: [] }, servers: [], blocked: [] };
   let view = "dm"; // "dm" | "server"
   let activePeer = null;   // username (DM)
   let activeServer = null; // id
@@ -69,6 +69,7 @@
   let unreadMap = {};
   let typingName = null, typingTimer = null;
   function persistAuth() { localStorage.setItem("buddy-token", token); localStorage.setItem("buddy-user", myUser); localStorage.setItem("buddy-name", myName); localStorage.setItem("buddy-pic", myPic); }
+  function saveLogin() { if (window.buddyDesktop && window.buddyDesktop.saveLogin) { try { window.buddyDesktop.saveLogin({ token, user: myUser, name: myName, pic: myPic }); } catch {} } }
   function clearAuth() { token = ""; myUser = ""; myName = ""; myPic = ""; ["buddy-token", "buddy-user", "buddy-name", "buddy-pic"].forEach((k) => localStorage.removeItem(k)); }
 
   const authEl = $("auth"), appEl = $("app");
@@ -172,6 +173,7 @@
     if (!res.ok) return showAuthError(res.error || "Something went wrong.");
     token = res.token; myUser = res.profile.username; myName = res.profile.displayName; myPic = res.profile.pic || "";
     persistAuth();
+    saveLogin();
     enterApp(res.profile);
   }
   $("authBtn").onclick = doAuth;
@@ -214,7 +216,7 @@
   socket.on("connect", () => { setConn("online"); if (token) socket.emit("auth", { token }); });
   socket.on("disconnect", () => setConn("offline"));
   socket.on("auth-error", () => { clearAuth(); location.reload(); });
-  socket.on("authed", ({ profile }) => { renderMyIdentity(profile); renderMyAvatar(); loadMe(); });
+  socket.on("authed", ({ profile }) => { renderMyIdentity(profile); renderMyAvatar(); saveLogin(); loadMe(); });
 
   function setConn(state) {
     if (!connState) return;
@@ -231,6 +233,8 @@
       if (res.friends) { state.friends = res.friends; res.friends.forEach(setProfile); }
       if (res.requests) { state.requests = res.requests; (res.requests.incoming || []).forEach(setProfile); (res.requests.outgoing || []).forEach(setProfile); }
       if (res.servers) { state.servers = res.servers; res.servers.forEach((s) => (s.members || []).forEach(setProfile)); }
+      if (res.blocked) state.blocked = res.blocked;
+      renderBlocked();
       renderRail();
       if (view === "dm") { renderFriendsDom(); renderRequestsDom(); }
       else renderServerView();
@@ -287,7 +291,7 @@
   $("homeBtn").onclick = () => selectHome();
   $("addServerBtn").onclick = () => openPrompt("Create a server", "Server name", async (name) => {
     const res = await api("/api/servers/create", { name }, true);
-    if (!res.ok) return flash("Could not create server.");
+    if (!res.ok) return flash(res.error || "Could not create server.", "err");
     selectServer(res.server.id);
   });
   function selectHome() {
@@ -409,12 +413,40 @@
     $("memberCount").textContent = (s.members || []).length;
   }
 
-  function flash(msg) { const e = $("friendMsg"); e.textContent = msg; e.className = "friend-msg ok"; e.classList.remove("hidden"); setTimeout(() => e.classList.add("hidden"), 2800); }
+  function flash(msg, type) {
+    const t = document.createElement("div");
+    t.className = "toast " + (type === "err" ? "err" : type === "info" ? "info" : "ok");
+    const iconId = type === "err" ? "#icon-close" : "#icon-check";
+    t.innerHTML = '<span class="t-dot"></span><span class="t-ico"><svg class="icon"><use href="' + iconId + '"/></svg></span><span>' + escapeHtml(msg) + '</span>';
+    const box = $("toasts"); if (box) { box.appendChild(t); setTimeout(() => { t.classList.add("leaving"); setTimeout(() => t.remove(), 260); }, 3000); }
+  }
+
+  function renderBlocked() {
+    const list = $("blockedList"); if (!list) return;
+    const empty = $("blockedEmpty");
+    const names = (state.blocked || []).slice();
+    list.querySelectorAll(".blocked-row").forEach((n) => n.remove());
+    if (!names.length) { if (empty) empty.style.display = ""; return; }
+    if (empty) empty.style.display = "none";
+    names.forEach((u) => {
+      const p = profiles.get(u) || { username: u, displayName: u };
+      const row = document.createElement("div"); row.className = "blocked-row";
+      const av = avatarEl(p.displayName, p.pic, "small");
+      const meta = document.createElement("div"); meta.className = "b-meta";
+      meta.innerHTML = '<div class="b-name">' + escapeHtml(p.displayName || u) + '</div><div class="b-sub">@' + escapeHtml(u) + '</div>';
+      const un = document.createElement("button"); un.className = "sm-p"; un.style.cssText = "flex:0 0 auto;padding:6px 10px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-2);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer";
+      un.textContent = "Unblock";
+      un.onclick = async () => { const r = await api("/api/friends/unblock", { target: u }, true); if (r && r.blocked) state.blocked = r.blocked; flash("Unblocked @" + u + "."); renderBlocked(); };
+      row.append(av, meta, un); list.appendChild(row);
+    });
+  }
 
   // ---- Profile popup ----
   const ACT_LABELS = { playing: "Playing", listening: "Listening to", watching: "Watching", competing: "Competing in", custom: "Custom" };
+  let profileTarget = null;
   function openProfile(username) {
     const p = profiles.get(username); if (!p) return;
+    profileTarget = username;
     const av = $("pmAvatar"); av.innerHTML = ""; av.appendChild(avatarEl(p.displayName, p.pic, "xxl"));
     $("pmName").textContent = p.displayName || username;
     $("pmUser").textContent = "@" + username;
@@ -432,11 +464,27 @@
     } else act.classList.add("hidden");
     const bioWrap = $("pmBioWrap");
     if (p.bio) { bioWrap.classList.remove("hidden"); $("pmBio").textContent = p.bio; } else bioWrap.classList.add("hidden");
-    $("pmMessage").onclick = () => { closeProfile(); openDM(username); };
+    const isFriend = (state.friends || []).some((f) => f.username === username);
+    const isBlocked = (state.blocked || []).includes(username);
+    $("pmMessage").style.display = isFriend ? "" : "none";
+    $("pmRemove").style.display = isFriend ? "" : "none";
+    $("pmBlock").style.display = isBlocked ? "none" : "";
+    $("pmUnblock").style.display = isBlocked ? "" : "none";
+    $("pmReport").style.display = "";
     $("profileModal").classList.remove("hidden");
   }
-  function closeProfile() { $("profileModal").classList.add("hidden"); }
+  function closeProfile() { $("profileModal").classList.add("hidden"); profileTarget = null; }
   $("profileModal").addEventListener("click", (e) => { if (e.target === $("profileModal")) closeProfile(); });
+  function reportPrompt(kind, target) {
+    const reason = window.prompt("Why are you reporting this " + kind + "? (optional)");
+    if (reason === null) return;
+    api("/api/report", { type: kind, target, reason }, true).then((r) => flash(r && r.ok ? "Reported. Thanks for the report." : "Report failed.")).catch(() => flash("Report failed."));
+  }
+  $("pmMessage").onclick = () => { if (!profileTarget) return; closeProfile(); openDM(profileTarget); };
+  $("pmRemove").onclick = async () => { if (!profileTarget) return; await api("/api/friends/remove", { friend: profileTarget }, true); flash("Removed friend."); closeProfile(); };
+  $("pmBlock").onclick = async () => { if (!profileTarget) return; const r = await api("/api/friends/block", { target: profileTarget }, true); if (r && r.blocked) state.blocked = r.blocked; renderBlocked(); flash("Blocked. They can't message you."); closeProfile(); };
+  $("pmUnblock").onclick = async () => { if (!profileTarget) return; const r = await api("/api/friends/unblock", { target: profileTarget }, true); if (r && r.blocked) state.blocked = r.blocked; renderBlocked(); flash("Unblocked."); closeProfile(); };
+  $("pmReport").onclick = () => { if (!profileTarget) return; const u = profileTarget; closeProfile(); reportPrompt("person", u); };
 
   // Add friend (sends request)
   document.querySelector(".add-friend").addEventListener("click", (e) => { if (e.target.closest(".field-icon")) addFriend(); });
@@ -444,13 +492,17 @@
   async function addFriend() {
     const f = $("friendInput").value.trim(); if (!f) return;
     const res = await api("/api/friends/request", { friend: f }, true);
-    if (!res.ok) return flash(res.error || "Could not send request.");
+    if (!res.ok) return flash(res.error || "Could not send request.", "err");
     $("friendInput").value = ""; flash("Friend request sent to @" + f + ".");
   }
 
   // Server actions
-  $("addChannelBtn").onclick = () => { if (!activeServer) return; openPrompt("Create channel", "channel-name", async (name) => { const res = await api("/api/servers/channel", { serverId: activeServer, name }, true); if (!res.ok) return flash(res.error || "Could not create channel."); const ch = res.server.channels[res.server.channels.length - 1]; openChannel(ch.id); }); };
-  $("inviteBtn").onclick = () => { if (!activeServer) return; openPrompt("Invite to server", "Username", async (name) => { const res = await api("/api/servers/invite", { serverId: activeServer, username: name }, true); if (!res.ok) return flash(res.error || "Could not invite."); flash("@" + name + " invited."); }); };
+  $("addChannelBtn").onclick = () => { if (!activeServer) return; openPrompt("Create channel", "channel-name", async (name) => {     const res = await api("/api/servers/channel", { serverId: activeServer, name }, true); if (!res.ok) return flash(res.error || "Could not create channel.", "err"); const ch = res.server.channels[res.server.channels.length - 1]; openChannel(ch.id); }); };
+  $("inviteBtn").onclick = () => { if (!activeServer) return; openPrompt("Invite to server", "Username", async (name) => {     const res = await api("/api/servers/invite", { serverId: activeServer, username: name }, true); if (!res.ok) return flash(res.error || "Could not invite.", "err"); flash("@" + name + " invited."); }); };
+  $("serverActionsBtn").onclick = (e) => { e.stopPropagation(); $("serverMenu").classList.toggle("hidden"); };
+  document.addEventListener("click", (e) => { const m = $("serverMenu"); if (m && !m.classList.contains("hidden") && !m.contains(e.target) && e.target !== $("serverActionsBtn") && !$("serverActionsBtn").contains(e.target)) m.classList.add("hidden"); });
+  $("serverLeave").onclick = async () => { if (!activeServer) return; if (!confirm("Leave this server?")) return; const res = await api("/api/servers/leave", { serverId: activeServer }, true); if (res.ok) { $("serverMenu").classList.add("hidden"); selectHome(); flash("Left server."); } };
+  $("serverReport").onclick = () => { const id = activeServer; $("serverMenu").classList.add("hidden"); const reason = window.prompt("Why are you reporting this server? (optional)"); if (reason === null) return; api("/api/report", { type: "server", target: id, reason }, true).then((r) => flash(r && r.ok ? "Reported. Thanks." : "Report failed.")).catch(() => flash("Report failed.")); };
 
   function openDM(friendUser, silent) {
     activePeer = profiles.get(friendUser) || { username: friendUser, displayName: friendUser };
@@ -583,7 +635,7 @@
   $("bioEdit").addEventListener("change", () => { api("/api/profile", { bio: $("bioEdit").value.trim() }, true); });
   $("savePass").onclick = async () => {
     const res = await api("/api/profile", { oldPassword: $("oldPass").value, newPassword: $("newPass").value }, true);
-    if (!res.ok) return flash(res.error || "Password not updated.");
+    if (!res.ok) return flash(res.error || "Password not updated.", "err");
     $("oldPass").value = ""; $("newPass").value = ""; flash("Password updated.");
   };
 
@@ -699,7 +751,7 @@
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Upload failed.");
       socket.emit("file", { url: data.url, kind: data.kind, name: data.name, size: data.size });
-    } catch (err) { flash(err.message || "Upload failed."); }
+    }     catch (err) { flash(err.message || "Upload failed.", "err"); }
     finally { sending.remove(); }
   }
   function appendSending(file) {
@@ -752,6 +804,47 @@
         .then((res) => { if (res && res.ok && res.profile) { myPresence = res.profile.presence; myStatus = res.profile.status; myActivity = res.profile.activity; renderMyStatus(); updateHeader(); } })
         .catch(() => {});
     });
+  }
+
+  // ====================================================================
+  //  ELECTRON: DURABLE LOGIN + UPDATE BANNER
+  // ====================================================================
+  async function restoreLogin() {
+    if (token || !window.buddyDesktop || !window.buddyDesktop.loadLogin) return;
+    try {
+      const saved = await window.buddyDesktop.loadLogin();
+      if (saved && saved.token) {
+        token = saved.token; myUser = saved.user || ""; myName = saved.name || ""; myPic = saved.pic || "";
+        persistAuth();
+        authEl.classList.add("hidden"); appEl.classList.remove("hidden");
+        loadMe(); renderMyIdentityPlaceholder();
+        if (socket.connected) socket.emit("auth", { token });
+      }
+    } catch {}
+  }
+  restoreLogin();
+
+  if (window.buddyDesktop) {
+    const banner = $("updateBanner"), btn = $("updateBtn"), close = $("updateClose");
+    if (banner) {
+      window.buddyDesktop.onUpdateAvailable((v) => {
+        banner.classList.remove("hidden");
+        $("updateText").textContent = "Update to the latest version of Buddy" + (v ? " (v" + v + ")" : "");
+        const us = $("updateStatus"); if (us) us.textContent = "";
+      });
+      window.buddyDesktop.onUpdateProgress((p) => { if (typeof p === "number") btn.textContent = "Downloading " + Math.round(p) + "%"; });
+      window.buddyDesktop.onUpdateDownloaded(() => { btn.textContent = "Installing…"; if (window.buddyDesktop.installUpdate) window.buddyDesktop.installUpdate(); });
+      window.buddyDesktop.onUpdateError(() => {});
+      let busy = false;
+      btn.onclick = () => { if (busy) return; busy = true; btn.textContent = "Downloading…"; if (window.buddyDesktop.startUpdateDownload) window.buddyDesktop.startUpdateDownload(); };
+      close.onclick = () => banner.classList.add("hidden");
+    }
+    const cu = $("checkUpdateBtn"), us = $("updateStatus");
+    if (cu) {
+      window.buddyDesktop.onUpdateChecking(() => { if (us) us.textContent = "Checking for updates…"; });
+      window.buddyDesktop.onUpdateLatest(() => { if (us) us.textContent = "You're on the latest version."; });
+      cu.onclick = () => { if (window.buddyDesktop.checkForUpdates) { if (us) us.textContent = "Checking for updates…"; window.buddyDesktop.checkForUpdates(); } else if (us) us.textContent = "Updates only run in the desktop app."; };
+    }
   }
 
   // ====================================================================
