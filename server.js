@@ -65,6 +65,28 @@ for (const k in users) {
   if (typeof u.status !== "string") u.status = "";
   if (u.activity !== null && typeof u.activity !== "object") u.activity = null;
   if (typeof u.lastSeen !== "number") u.lastSeen = 0;
+  if (u.pronouns === undefined) u.pronouns = "";
+  if (u.banner === undefined) u.banner = "";
+  if (!u.createdAt) u.createdAt = Date.now();
+  if (typeof u.mute !== "boolean") u.mute = false;
+  if (typeof u.deafen !== "boolean") u.deafen = false;
+  if (typeof u.voice !== "object" || !u.voice) u.voice = {};
+  if (typeof u.notif !== "object" || !u.notif) u.notif = {};
+  if (!Array.isArray(u.favorites)) u.favorites = [];
+  if (typeof u.notes !== "object" || !u.notes) u.notes = {};
+  if (typeof u.friendNick !== "object" || !u.friendNick) u.friendNick = {};
+  if (!Array.isArray(u.bookmarks)) u.bookmarks = [];
+  if (!Array.isArray(u.badges)) u.badges = [];
+  if (typeof u.flags !== "number") u.flags = 0;
+}
+for (const id in servers) {
+  const s = servers[id];
+  if (typeof s.nicknames !== "object" || !s.nicknames) s.nicknames = {};
+  if (!Array.isArray(s.roles)) s.roles = [];
+  if (!Array.isArray(s.emojis)) s.emojis = [];
+  if (!Array.isArray(s.bans)) s.bans = [];
+  if (!Array.isArray(s.audit)) s.audit = [];
+  s.channels.forEach((c) => { if (typeof c.slow !== "number") c.slow = 0; if (typeof c.topic !== "string") c.topic = ""; });
 }
 function saveUsers() { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); }
 function saveServers() { fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2)); }
@@ -103,6 +125,12 @@ function publicProfile(uname) {
     displayName: u.displayName,
     pic: u.pic || "",
     bio: u.bio || "",
+    pronouns: u.pronouns || "",
+    banner: u.banner || "",
+    badges: u.badges || [],
+    createdAt: u.createdAt || 0,
+    mute: !!u.mute,
+    deafen: !!u.deafen,
     online: online.has(uname),
     presence: effectivePresence(uname),
     status: u.status || "",
@@ -111,13 +139,39 @@ function publicProfile(uname) {
   };
 }
 function friendView(uname) { return publicProfile(uname); }
-function memberView(uname) { return publicProfile(uname); }
+function memberView(uname) {
+  const p = publicProfile(uname); if (!p) return null;
+  const sid = serverOfMember(uname);
+  const s = sid ? servers[sid] : null;
+  if (s) {
+    p.nickname = ((s.nicknames || {})[uname]) || "";
+    const r = colorRoleFor(s, uname);
+    p.roleColor = r ? r.color : "";
+    p.roles = (s.roles || []).filter((x) => (x.members || []).includes(uname)).map((x) => ({ id: x.id, name: x.name, color: x.color }));
+  }
+  return p;
+}
+function serverOfMember(uname) { for (const id in servers) if (servers[id].members.includes(uname)) return id; return null; }
+function colorRoleFor(s, username) {
+  let best = null;
+  (s.roles || []).forEach((r) => { if (r.members.includes(username) && r.color && (!best || (r.pos || 0) > (best.pos || 0))) best = r; });
+  return best;
+}
+function permsFor(s, username) {
+  if (s.owner === username) return 0xffff;
+  let p = 0; (s.roles || []).forEach((r) => { if (r.members.includes(username)) p |= (r.permissions || 0); }); return p;
+}
 function serverView(id) {
   const s = servers[id];
   if (!s) return null;
   return {
     id: s.id, name: s.name, owner: s.owner, iconColor: s.iconColor,
-    channels: s.channels.map((c) => ({ id: c.id, name: c.name })),
+    roles: (s.roles || []).map((r) => ({ id: r.id, name: r.name, color: r.color || "", permissions: r.permissions || 0, members: r.members || [], pos: r.pos || 0 })),
+    emojis: s.emojis || [],
+    nicknames: s.nicknames || {},
+    bans: s.bans || [],
+    audit: (s.audit || []).slice(-50),
+    channels: s.channels.map((c) => ({ id: c.id, name: c.name, topic: c.topic || "", slow: c.slow || 0 })),
     members: s.members.map(memberView).filter(Boolean),
   };
 }
@@ -137,9 +191,15 @@ function roomMembers(room) {
   if (room.startsWith("chan:")) { const sid = serverOfChannel(room.slice(5)); return sid ? servers[sid].members : []; }
   return [];
 }
-function incUnread(room, sender) {
+function incUnread(room, sender, msg) {
+  let serverId = null;
+  if (room.startsWith("chan:")) serverId = serverOfChannel(room.slice(5));
+  const text = (msg && (msg.text || "")) || "";
   for (const u of roomMembers(room)) {
     if (u === sender) continue;
+    const mode = serverId && users[u] && users[u].notif ? users[u].notif[serverId] : null;
+    if (mode === "none") continue;
+    if (mode === "mentions" && !new RegExp("@(everyone|here|" + u + ")\\b").test(text)) continue;
     if (!unread.has(u)) unread.set(u, {});
     const m = unread.get(u); m[room] = (m[room] || 0) + 1;
     emitUnread(u);
@@ -189,8 +249,10 @@ app.get("/api/version", (req, res) => {
 });
 
 // ---- TURN relay via Metered.ca (dynamic, short-lived credentials) ----
-const METERED_KEY = process.env.METERED_API_KEY || "";
-const METERED_TURN_URL = "https://buddy-chat.metered.live/api/v1/turn/credentials";
+// Priority: env METERED_API_KEY -> config.meteredKey -> render.yaml etc.
+const METERED_KEY = process.env.METERED_API_KEY || fileConfig.meteredKey || "";
+const METERED_SUBDOMAIN = process.env.METERED_SUBDOMAIN || fileConfig.meteredSubdomain || "buddy-chat";
+const METERED_TURN_URL = "https://" + METERED_SUBDOMAIN + ".metered.live/api/v1/turn/credentials";
 let turnCache = { at: 0, servers: [] };
 async function getTurnServers() {
   if (!METERED_KEY) return [];
@@ -307,11 +369,14 @@ app.get("/api/me", (req, res) => {
 app.post("/api/profile", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   const u = users[uname];
-  const { displayName, pic, bio, oldPassword, newPassword, presence, status } = req.body || {};
+  const { displayName, pic, bio, pronouns, banner, voice, oldPassword, newPassword, presence, status } = req.body || {};
   if (typeof displayName === "string" && displayName.trim()) u.displayName = displayName.trim().slice(0, 32);
   if (typeof pic === "string") u.pic = pic.slice(0, 200000);
   if (typeof bio === "string") u.bio = bio.slice(0, 200);
-  if (typeof presence === "string" && ["online", "idle", "dnd"].includes(presence)) u.presence = presence;
+  if (typeof pronouns === "string") u.pronouns = pronouns.slice(0, 40);
+  if (typeof banner === "string") u.banner = banner.slice(0, 200000);
+  if (voice && typeof voice === "object") u.voice = { echo: !!voice.echo, noise: !!voice.noise, agc: !!voice.agc, ptt: !!voice.ptt };
+  if (typeof presence === "string" && ["online", "idle", "dnd", "invisible"].includes(presence)) u.presence = presence;
   if (typeof status === "string") u.status = status.slice(0, 64);
   if (newPassword) {
     if (!oldPassword || !verifyPassword(oldPassword, u.salt, u.hash)) return res.status(400).json({ error: "Current password is incorrect." });
@@ -451,7 +516,11 @@ app.post("/api/servers/create", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   const name = (req.body && req.body.name || "").trim().slice(0, 40) || "New Server";
   const id = newId("srv_");
-  servers[id] = { id, name, owner: uname, iconColor: colorFor(name), members: [uname], channels: [{ id: newId("ch_"), name: "general" }] };
+  servers[id] = {
+    id, name, owner: uname, iconColor: colorFor(name), members: [uname],
+    channels: [{ id: newId("ch_"), name: "general", topic: "", slow: 0 }],
+    roles: [], emojis: [], nicknames: {}, bans: [], audit: [],
+  };
   if (!users[uname].servers.includes(id)) users[uname].servers.push(id);
   saveServers(); saveUsers();
   emitServersTo(uname);
@@ -480,8 +549,8 @@ app.post("/api/servers/channel", (req, res) => {
   if (!s) return res.status(404).json({ error: "Server not found." });
   if (!s.members.includes(uname)) return res.status(403).json({ error: "You're not in this server." });
   if (!/^[a-zA-Z0-9 _-]{1,40}$/.test(name)) return res.status(400).json({ error: "Invalid channel name." });
-  const channelId = newId("ch_");
-  s.channels.push({ id: channelId, name: name.toLowerCase().replace(/\s+/g, "-") });
+   const channelId = newId("ch_");
+   s.channels.push({ id: channelId, name: name.toLowerCase().replace(/\s+/g, "-"), topic: "", slow: 0 });
   saveServers();
   s.members.forEach((m) => emitServersTo(m));
   res.json({ ok: true, server: serverView(id) });
@@ -500,25 +569,82 @@ app.post("/api/servers/leave", (req, res) => {
   res.json({ ok: true });
 });
 
-// ---- Klipy proxy ----
-async function klipy(req, res, type, endpoint) {
-  if (!KLIPY_KEY) return res.status(503).json({ error: "no_key", message: "Set KLIPY_API_KEY on the server." });
-  try {
-    const cid = crypto.randomUUID();
-    const url = new URL(`https://api.klipy.com/api/v1/${KLIPY_KEY}/${type}/${endpoint}`);
-    url.searchParams.set("customer_id", cid);
-    url.searchParams.set("per_page", String(Math.min(40, Math.max(1, parseInt(req.query.per_page) || 24))));
-    url.searchParams.set("page", String(Math.max(1, parseInt(req.query.page) || 1)));
-    if (req.query.q) url.searchParams.set("q", String(req.query.q).slice(0, 80));
-    const r = await fetch(url, { headers: { Accept: "application/json" } });
-    const data = await r.json().catch(() => ({}));
-    res.json(data);
-  } catch (e) { res.status(502).json({ error: "proxy_failed", message: String(e.message || e) }); }
+// ---- GIF / Sticker picker (Klipy primary, Reddit + keyless fallback) ----
+// Returns a normalized shape the client understands: { data: [ { url, preview, format } ] }
+function klipyToMedia(item, kind) {
+  const f = item && item.file; if (!f) return null;
+  const hd = f.hd || {}, md = f.md || {};
+  const fullList = kind === "sticker" ? ["webp", "png", "gif"] : ["gif", "mp4", "webp"];
+  for (const e of fullList) {
+    const u = hd[e] || md[e];
+    if (u && u.url) {
+      const preview = (md.webp && md.webp.url) || (md.gif && md.gif.url) || u.url;
+      const format = (e === "mp4" || e === "webm") ? "video" : "gif";
+      return { url: u.url, preview, format };
+    }
+  }
+  return null;
 }
-app.get("/api/gifs/trending", (req, res) => klipy(req, res, "gifs", "trending"));
-app.get("/api/gifs/search", (req, res) => klipy(req, res, "gifs", "search"));
-app.get("/api/stickers/trending", (req, res) => klipy(req, res, "stickers", "trending"));
-app.get("/api/stickers/search", (req, res) => klipy(req, res, "stickers", "search"));
+async function klipyPicker(kind, q) {
+  const type = kind === "sticker" ? "stickers" : "gifs";
+  const url = "https://api.klipy.com/api/v1/" + KLIPY_KEY + "/" + type + "/" + (q ? "search" : "trending") + "?per_page=40&page=1" + (q ? "&q=" + encodeURIComponent(q) : "");
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  const j = await r.json().catch(() => ({}));
+  const arr = (j.data && j.data.data) || (j.data && j.data.results) || (Array.isArray(j.data) ? j.data : []);
+  const out = [];
+  (Array.isArray(arr) ? arr : []).forEach((item) => {
+    const m = klipyToMedia(item, kind);
+    if (m && /\.(gif|mp4|webm)(\?|$)/i.test(m.url)) out.push(m);
+  });
+  return out;
+}
+function redditMedia(d) {
+  const prev = d.preview && d.preview.images && d.preview.images[0];
+  let gif = prev ? prev.source.url.replace(/&amp;/g, "&") : null;
+  const mp4 = prev && prev.variants && prev.variants.mp4 && prev.variants.mp4.source ? prev.variants.mp4.source.url.replace(/&amp;/g, "&") : null;
+  const rv = d.media && d.media.reddit_video ? d.media.reddit_video.fallback_url.replace(/&amp;/g, "&") : null;
+  const url = mp4 || rv || gif || d.url;
+  if (!url) return null;
+  const isVideo = !!mp4 || !!rv;
+  return { url, preview: gif || url, format: isVideo ? "video" : "gif", title: d.title || "", source: "https://reddit.com" + (d.permalink || "") };
+}
+async function redditPicker(kind, q) {
+  const sub = kind === "sticker" ? ["discordstickers", "Stickers", "discord_emojis"] : ["reactiongifs", "gifs", "discord_emoji", "CatGifs", "funny"];
+  const headers = { "User-Agent": "Buddy/1.0 (chat app)", Accept: "application/json" };
+  const url = q ? "https://www.reddit.com/search.json?q=" + encodeURIComponent(q) + "&sort=top&t=year&type=link&limit=50" : "https://www.reddit.com/r/" + sub[0] + "/top.json?t=week&limit=60";
+  const r = await fetch(url, { headers });
+  if (!r.ok) throw new Error("reddit " + r.status);
+  const json = await r.json();
+  const children = (json && json.data && json.data.children) || [];
+  const out = [];
+  for (const c of children) {
+    const d = c.data; if (!d || d.stickied) continue;
+    const m = redditMedia(d);
+    if (m && /\.(gif|mp4|webm)(\?|$)/i.test(m.url) && !/reddit\.com\/r\//i.test(m.url)) out.push(m);
+    if (out.length >= 48) break;
+  }
+  return out;
+}
+async function animePicker(kind) {
+  const tags = ["waifu", "smile", "wave", "blush", "happy", "cry", "dance", "cuddle", "pat", "highfive", "handhold", "kiss", "slap", "happy"];
+  const out = [];
+  for (const t of tags.slice(0, 14)) {
+    try { const r = await fetch("https://api.waifu.pics/sfw/" + t); const j = await r.json(); if (j && j.url) out.push({ url: j.url, preview: j.url, format: "gif" }); } catch {}
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+async function gifProxy(req, res, kind) {
+  const q = (req.query.q || "").toString().slice(0, 80).trim();
+  if (KLIPY_KEY) { try { const data = await klipyPicker(kind, q); if (data.length) return res.json({ data }); } catch (e) { console.error("Klipy failed:", e.message); } }
+  try { const data = await redditPicker(kind, q); if (data.length) return res.json({ data }); } catch (e) {}
+  try { const data = await animePicker(kind); if (data.length) return res.json({ data }); } catch (e) {}
+  res.status(502).json({ error: "proxy_failed", message: "All GIF sources unavailable." });
+}
+app.get("/api/gifs/trending", (req, res) => gifProxy(req, res, "gif"));
+app.get("/api/gifs/search", (req, res) => gifProxy(req, res, "gif"));
+app.get("/api/stickers/trending", (req, res) => gifProxy(req, res, "sticker"));
+app.get("/api/stickers/search", (req, res) => gifProxy(req, res, "sticker"));
 
 // ---- Socket ----
 const dmRoom = (a, b) => "dm:" + [a, b].sort().join("|");
@@ -531,7 +657,7 @@ function canPost(room, uname) {
 }
 function deliver(room, msg, sender) {
   const arr = roomMsgs(room); arr.push(msg); if (arr.length > 500) arr.shift();
-  scheduleSaveHistory(); incUnread(room, sender);
+  scheduleSaveHistory(); incUnread(room, sender, msg);
   io.to(room).emit("message", msg);
 }
 
@@ -582,8 +708,14 @@ io.on("connection", (socket) => {
   socket.on("message", (text, replyTo) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
     if (!rateLimit("msg:" + socket.id, 8, 1000)) return;
+    const slow = slowFor(socket.activeRoom);
+    if (slow > 0) {
+      const until = (slowState.get(socket.activeRoom + "|" + socket.user) || 0);
+      if (Date.now() < until) { socket.emit("slow", { wait: Math.ceil((until - Date.now()) / 1000) }); return; }
+    }
     const reply = replyTo ? (() => { const m = findMsg(socket.activeRoom, replyTo); return m ? { id: m.id, user: m.user, text: (m.text || (m.kind ? m.kind : "")).slice(0, 80) } : null; })() : null;
     deliver(socket.activeRoom, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, text: String(text).slice(0, 4000), ts: Date.now(), replyTo: reply }, socket.user);
+    if (slow > 0) slowState.set(socket.activeRoom + "|" + socket.user, Date.now() + slow * 1000);
   });
   socket.on("media", ({ url, kind, format, replyTo }) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
@@ -602,9 +734,11 @@ io.on("connection", (socket) => {
     if (!ensureAuth() || !socket.activeRoom) return;
     const m = findMsg(socket.activeRoom, id);
     if (!m || m.user !== users[socket.user].username || m.kind) return;
+    m.history = m.history || [];
+    if (m.text) m.history.push({ text: m.text, ts: Date.now() });
     m.text = String(text).slice(0, 4000); m.edited = true;
     scheduleSaveHistory();
-    io.to(socket.activeRoom).emit("edited", { id, text: m.text, edited: true });
+    io.to(socket.activeRoom).emit("edited", { id, text: m.text, edited: true, history: m.history });
   });
   socket.on("react", ({ id, emoji }) => {
     if (!ensureAuth() || !socket.activeRoom) return;
@@ -621,10 +755,13 @@ io.on("connection", (socket) => {
   socket.on("delete", ({ id }) => {
     if (!ensureAuth() || !socket.activeRoom) return;
     const arr = roomMsgs(socket.activeRoom);
-    const i = arr.findIndex((x) => x.id === id);
-    if (i === -1 || arr[i].user !== users[socket.user].username) return;
-    arr.splice(i, 1); scheduleSaveHistory();
-    io.to(socket.activeRoom).emit("deleted", { id });
+    const m = arr.find((x) => x.id === id);
+    if (!m) return;
+    const isAdmin = socket.activeRoom.startsWith("chan:") && (() => { const sid = serverOfChannel(socket.activeRoom.slice(5)); const s = sid && servers[sid]; return s && (s.owner === socket.user || (permsFor(s, socket.user) & 32)); })();
+    if (m.user !== socket.user && !isAdmin) return;
+    m.deleted = true; m.text = ""; m.kind = null; m.reactions = {}; m.replyTo = null; m.poll = null;
+    scheduleSaveHistory();
+    io.to(socket.activeRoom).emit("deleted", { id, deleted: true });
   });
 
   socket.on("dm-invite", ({ friend }) => {
@@ -667,6 +804,300 @@ io.on("connection", (socket) => {
       notifyPresence(socket.user);
       socket.callRooms.forEach((cid) => { socket.to("gcall:" + cid).emit("call2:left", { from: socket.id }); });
     }
+  });
+});
+
+// ====================================================================
+//  EXTENDED DISCORD-LIKE FEATURES
+// ====================================================================
+const PERMS = { MANAGE: 1, KICK: 2, BAN: 4, MENTION: 8, INVITE: 16, PIN: 32 };
+const PERM_BITS = { manage: 1, kick: 2, ban: 4, mention: 8, invite: 16, pin: 32 };
+const slowState = new Map(); // room|user -> ts
+const pins = new Map();      // room -> [msgId]
+const invites = new Map();   // code -> {serverId, expires, uses}
+function slowFor(room) {
+  if (!room || !room.startsWith("chan:")) return 0;
+  const sid = serverOfChannel(room.slice(5)); const s = sid && servers[sid];
+  if (!s) return 0;
+  const ch = s.channels.find((c) => c.id === room.slice(5));
+  return ch ? (ch.slow || 0) : 0;
+}
+function serverAdmin(s, uname) { return s && (s.owner === uname || (permsFor(s, uname) & PERMS.MANAGE)); }
+function audit(s, by, action, target) {
+  s.audit = s.audit || [];
+  s.audit.push({ by, action, target, ts: Date.now() });
+  if (s.audit.length > 100) s.audit = s.audit.slice(-100);
+  s.members.forEach((m) => emitServersTo(m));
+}
+
+// ---- Server admin / roles / emoji / moderation ----
+app.post("/api/servers/role", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, action, roleId, name, color, perms, target } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!serverAdmin(s, uname)) return res.status(403).json({ error: "You need Manage Server." });
+  if (action === "create") {
+    const r = { id: newId("role_"), name: (name || "new role").slice(0, 32), color: color || "#99aab5", permissions: 0, members: [], pos: s.roles.length };
+    if (Array.isArray(perms)) perms.forEach((p) => { if (PERM_BITS[p]) r.permissions |= PERM_BITS[p]; });
+    if (typeof perms === "number") r.permissions = perms | 0;
+    s.roles.push(r); saveServers(); emitServersTo(uname); return res.json({ ok: true, role: r });
+  }
+  const r = s.roles.find((x) => x.id === roleId); if (!r) return res.status(404).json({ error: "Role not found." });
+  if (action === "delete") { s.roles = s.roles.filter((x) => x.id !== roleId); saveServers(); emitServersTo(uname); return res.json({ ok: true }); }
+  if (action === "rename") { r.name = (name || r.name).slice(0, 32); }
+  if (action === "color") { r.color = color || r.color; }
+  if (action === "perm") { r.permissions = 0; if (Array.isArray(perms)) perms.forEach((p) => { if (PERM_BITS[p]) r.permissions |= PERM_BITS[p]; }); if (typeof perms === "number") r.permissions = perms | 0; }
+  if (action === "assign" && target) { const t = norm(target); if (s.members.includes(t) && !r.members.includes(t)) r.members.push(t); }
+  if (action === "unassign" && target) { r.members = (r.members || []).filter((x) => x !== norm(target)); }
+  saveServers(); s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true, role: r });
+});
+app.post("/api/servers/nick", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, nick } = req.body || {};
+  const s = servers[serverId]; if (!s || !s.members.includes(uname)) return res.status(403).json({ error: "Not in server." });
+  s.nicknames = s.nicknames || {};
+  s.nicknames[uname] = (nick || "").slice(0, 32); if (!nick) delete s.nicknames[uname];
+  saveServers(); s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true, nickname: s.nicknames[uname] || "" });
+});
+app.post("/api/servers/slow", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, channelId, seconds } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!serverAdmin(s, uname)) return res.status(403).json({ error: "Need Manage Server." });
+  const ch = s.channels.find((c) => c.id === channelId); if (!ch) return res.status(404).json({ error: "Channel not found." });
+  ch.slow = Math.max(0, Math.min(3600, +seconds || 0)); saveServers(); s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true, slow: ch.slow });
+});
+app.post("/api/servers/emoji", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, action, name, url } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!(s.owner === uname || (permsFor(s, uname) & PERMS.MANAGE))) return res.status(403).json({ error: "Need Manage Server." });
+  s.emojis = s.emojis || [];
+  if (action === "add") {
+    const nm = (name || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!nm) return res.status(400).json({ error: "Invalid emoji name." });
+    if (!/^\/uploads\//.test(url || "")) return res.status(400).json({ error: "Emoji must be an uploaded image." });
+    if (s.emojis.length >= 50) return res.status(400).json({ error: "Emoji limit reached." });
+    const e = { name: nm, url }; s.emojis.push(e); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true, emoji: e });
+  }
+  if (action === "del") { s.emojis = s.emojis.filter((e) => e.name !== name); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true }); }
+  res.status(400).json({ error: "Unknown action." });
+});
+function doKickBan(req, res, kind) {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, target } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  const t = norm(target);
+  if (s.owner === t) return res.status(403).json({ error: "You can't remove the owner." });
+  const need = kind === "ban" ? PERMS.BAN : PERMS.KICK;
+  if (!(s.owner === uname || (permsFor(s, uname) & need))) return res.status(403).json({ error: "Missing permission." });
+  if (!s.members.includes(t)) return res.status(404).json({ error: "Not a member." });
+  s.members = s.members.filter((m) => m !== t);
+  users[t].servers = (users[t].servers || []).filter((x) => x !== serverId);
+  if (kind === "ban") { s.bans = s.bans || []; if (!s.bans.includes(t)) s.bans.push(t); }
+  saveServers(); saveUsers();
+  io.to("user:" + t).emit("kicked", { serverId });
+  audit(s, uname, kind, t);
+  s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true });
+}
+app.post("/api/servers/kick", (req, res) => doKickBan(req, res, "kick"));
+app.post("/api/servers/ban", (req, res) => doKickBan(req, res, "ban"));
+app.post("/api/servers/unban", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, target } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!(s.owner === uname || (permsFor(s, uname) & PERMS.BAN))) return res.status(403).json({ error: "Missing permission." });
+  s.bans = (s.bans || []).filter((x) => x !== norm(target)); saveServers(); s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true });
+});
+app.post("/api/servers/invite-code", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, expires, maxUses } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!(s.owner === uname || (permsFor(s, uname) & PERMS.INVITE))) return res.status(403).json({ error: "Missing permission." });
+  const code = crypto.randomBytes(4).toString("hex");
+  invites.set(code, { serverId, expires: expires ? Date.now() + expires * 1000 : 0, maxUses: maxUses || 0, uses: 0 });
+  res.json({ ok: true, code, link: "/invite/" + code });
+});
+app.post("/api/invite/join", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { code } = req.body || {};
+  const inv = invites.get(code);
+  if (!inv) return res.status(404).json({ error: "Invalid invite." });
+  if (inv.expires && Date.now() > inv.expires) { invites.delete(code); return res.status(410).json({ error: "Invite expired." }); }
+  if (inv.maxUses && inv.uses >= inv.maxUses) return res.status(410).json({ error: "Invite max uses reached." });
+  const s = servers[inv.serverId]; if (!s) { invites.delete(code); return res.status(404).json({ error: "Server gone." }); }
+  if (s.bans && s.bans.includes(uname)) return res.status(403).json({ error: "You are banned from this server." });
+  inv.uses++;
+  if (!s.members.includes(uname)) s.members.push(uname);
+  if (!users[uname].servers.includes(inv.serverId)) users[uname].servers.push(inv.serverId);
+  saveServers(); saveUsers();
+  s.members.forEach((m) => emitServersTo(m));
+  res.json({ ok: true, server: serverView(inv.serverId) });
+});
+app.post("/api/servers/notif", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, mode } = req.body || {};
+  if (!["all", "mentions", "none"].includes(mode)) return res.status(400).json({ error: "Bad mode." });
+  users[uname].notif = users[uname].notif || {};
+  users[uname].notif[serverId] = mode; saveUsers();
+  res.json({ ok: true, notif: users[uname].notif });
+});
+app.get("/api/servers/:id/bans", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const s = servers[req.params.id]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!serverAdmin(s, uname)) return res.status(403).json({ error: "Missing permission." });
+  res.json({ bans: (s.bans || []).map((u) => publicProfile(u)).filter(Boolean) });
+});
+
+// ---- Friends: favorites / notes / nicknames ----
+app.post("/api/friends/favorite", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { target, on } = req.body || {};
+  const t = norm(target); if (!users[t]) return res.status(404).json({ error: "No user." });
+  users[uname].favorites = users[uname].favorites || [];
+  if (on) { if (!users[uname].favorites.includes(t)) users[uname].favorites.push(t); }
+  else users[uname].favorites = users[uname].favorites.filter((x) => x !== t);
+  saveUsers(); res.json({ ok: true, favorites: users[uname].favorites });
+});
+app.post("/api/friends/note", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { target, note } = req.body || {};
+  users[uname].notes = users[uname].notes || {};
+  users[uname].notes[norm(target)] = String(note || "").slice(0, 500); saveUsers();
+  res.json({ ok: true });
+});
+app.post("/api/friends/nick", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { target, nick } = req.body || {};
+  users[uname].friendNick = users[uname].friendNick || {};
+  users[uname].friendNick[norm(target)] = String(nick || "").slice(0, 32); if (!nick) delete users[uname].friendNick[norm(target)];
+  saveUsers(); emitFriendsTo(uname); res.json({ ok: true });
+});
+
+// ---- Voice / presence settings ----
+app.post("/api/me/voice", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { echo, noise, agc, ptt } = req.body || {};
+  const u = users[uname];
+  u.voice = { echo: !!echo, noise: !!noise, agc: !!agc, ptt: !!ptt };
+  saveUsers(); res.json({ ok: true, voice: u.voice });
+});
+app.post("/api/presence/voice", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { mute, deafen } = req.body || {};
+  const u = users[uname];
+  if (typeof mute === "boolean") u.mute = mute;
+  if (typeof deafen === "boolean") u.deafen = deafen;
+  saveUsers(); notifyPresence(uname); res.json({ ok: true });
+});
+
+// ---- Bookmarks / saved messages ----
+app.post("/api/me/bookmark", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { room, id } = req.body || {};
+  users[uname].bookmarks = users[uname].bookmarks || [];
+  const i = users[uname].bookmarks.findIndex((b) => b.room === room && b.id === id);
+  if (i >= 0) users[uname].bookmarks.splice(i, 1); else users[uname].bookmarks.push({ room, id });
+  saveUsers(); res.json({ ok: true, bookmarks: users[uname].bookmarks });
+});
+app.get("/api/bookmarks", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const out = (users[uname].bookmarks || []).map((b) => {
+    const m = findMsg(b.room, b.id);
+    return m ? Object.assign({ room: b.room }, m) : null;
+  }).filter(Boolean);
+  res.json({ bookmarks: out });
+});
+
+// ---- Search & history pagination ----
+app.get("/api/search", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const room = req.query.room; const q = String(req.query.q || "").toLowerCase().slice(0, 80);
+  if (!canPost(room, uname)) return res.status(403).json({ error: "No access." });
+  const arr = roomMsgs(room);
+  const results = arr.filter((m) => !m.deleted && m.text && m.text.toLowerCase().includes(q)).slice(-50);
+  res.json({ results });
+});
+app.get("/api/history", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const room = req.query.room; const before = +req.query.before || Date.now(); const limit = Math.min(100, +req.query.limit || 50);
+  if (!canPost(room, uname)) return res.status(403).json({ error: "No access." });
+  const arr = roomMsgs(room).filter((m) => (m.ts || 0) < before).slice(-limit);
+  res.json({ messages: arr });
+});
+
+// ---- Message report ----
+app.post("/api/report/message", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { room, id, reason } = req.body || {};
+  reports.push({ by: uname, type: "message", room, target: id, reason: String(reason || "").slice(0, 500), ts: Date.now() });
+  if (reports.length > 500) reports = reports.slice(-500); saveReports();
+  res.json({ ok: true });
+});
+
+// ---- Live socket features (pins, forward, polls, voice) ----
+io.on("connection", (socket) => {
+  const me = () => socket.user;
+
+  function canPin(room) {
+    if (!room || !room.startsWith("chan:")) return true;
+    const sid = serverOfChannel(room.slice(5)); const s = sid && servers[sid];
+    return s ? (s.owner === socket.user || (permsFor(s, socket.user) & PERMS.PIN)) : false;
+  }
+
+  socket.on("pin", ({ id }) => {
+    if (!socket.user || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
+    if (!canPin(socket.activeRoom)) return;
+    const arr = pins.get(socket.activeRoom) || [];
+    const i = arr.indexOf(id);
+    if (i >= 0) arr.splice(i, 1); else arr.push(id);
+    pins.set(socket.activeRoom, arr);
+    io.to(socket.activeRoom).emit("pinned", { ids: arr });
+  });
+  socket.on("get-pins", () => {
+    if (!socket.user || !socket.activeRoom) return;
+    socket.emit("pinned", { ids: pins.get(socket.activeRoom) || [] });
+  });
+  socket.on("forward", ({ id, to }) => {
+    if (!socket.user || !to || !canPost(to, socket.user)) return;
+    const m = findMsg(socket.activeRoom, id) || findMsg(to, id);
+    if (!m || m.deleted) return;
+    const copy = Object.assign({}, m, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), ts: Date.now(), forwarded: { from: m.user, room: socket.activeRoom } });
+    delete copy.reactions; delete copy.edited;
+    deliver(to, copy, socket.user);
+  });
+  socket.on("poll:create", ({ question, options }) => {
+    if (!socket.user || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
+    const opts = (options || []).map((o) => String(o).slice(0, 80)).filter(Boolean).slice(0, 10);
+    if (!question || opts.length < 2) return;
+    deliver(socket.activeRoom, {
+      id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"),
+      user: users[socket.user].username, kind: "poll", ts: Date.now(),
+      poll: { question: String(question).slice(0, 200), options: opts, votes: {} },
+    }, socket.user);
+  });
+  socket.on("poll:vote", ({ id, option }) => {
+    if (!socket.user || !socket.activeRoom) return;
+    const m = findMsg(socket.activeRoom, id);
+    if (!m || !m.poll) return;
+    m.poll.votes = m.poll.votes || {};
+    const prev = m.poll.votes[socket.user];
+    if (prev === option) delete m.poll.votes[socket.user];
+    else m.poll.votes[socket.user] = option;
+    scheduleSaveHistory();
+    io.to(socket.activeRoom).emit("poll:update", { id, votes: m.poll.votes });
+  });
+  socket.on("voice-state", ({ mute, deafen }) => {
+    if (!socket.user) return;
+    const u = users[socket.user]; if (!u) return;
+    if (typeof mute === "boolean") u.mute = mute;
+    if (typeof deafen === "boolean") u.deafen = deafen;
+    saveUsers(); notifyPresence(socket.user);
   });
 });
 

@@ -90,19 +90,21 @@ internet. Two easy options:
 
 WebRTC uses STUN to discover your address. It works for most home connections,
 but **symmetric NATs** (some mobile/corporate networks) need a TURN relay.
-To add one, edit the `STUN` config at the top of `public/client.js`:
+TURN is **already wired up** — the server fetches short-lived Metered.ca
+credentials at call time and the client refreshes them before every call
+(`/api/turn` + `/api/config`), so 1:1 and group calls traverse restrictive
+NATs via the TURN relay automatically.
 
-```js
-const STUN = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "turn:YOUR_TURN_HOST:3478", username: "user", credential: "pass" },
-  ],
-};
-```
+To enable it, provide your Metered API key (the call already works on the
+bundled `buddy-chat` Metered account). Set it in **one** of these ways:
 
-Free TURN credentials: [metered.ca](https://metered.ca) (free tier) or
-[openrelay](https://www.metered.ca/tools/openrelay).
+- `config.json` → `"meteredKey": "YOUR_KEY"` and optionally `"meteredSubdomain": "buddy-chat"`
+- environment variable `METERED_API_KEY=YOUR_KEY` (e.g. on Render)
+
+The live call overlay shows **Direct · P2P** vs **Relay · TURN** so you can see
+which path a call is taking. No client-side config edits are required.
+
+Free TURN credentials: [metered.ca](https://metered.ca) (free tier).
 
 ## Desktop app download on the website
 

@@ -598,3 +598,112 @@ html, body {
   .sidebar { display: none; }
   #localVideo { width: 110px; height: 80px; }
 }
+
+/* ===================== FEATURE PACK (Discord-like) ===================== */
+.header-tools { display: flex; gap: 4px; margin-right: 6px; }
+.emoji-panel { position: fixed; z-index: 120; width: 320px; max-height: 340px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); display: flex; flex-direction: column; overflow: hidden; }
+.emoji-head { display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid var(--border); }
+.emoji-head input { flex: 1; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 8px; }
+.emoji-cats { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px; border-bottom: 1px solid var(--border); }
+.emoji-cat { flex: 1 0 auto; min-width: 26px; height: 26px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text-2); border-radius: 6px; cursor: pointer; font-size: 12px; }
+.emoji-cat.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 6px; overflow-y: auto; }
+.emoji-cell { font-size: 20px; height: 34px; border: none; background: transparent; border-radius: 6px; cursor: pointer; }
+.emoji-cell:hover { background: var(--bg-3); transform: scale(1.12); }
+
+.ctx-menu { position: fixed; z-index: 200; min-width: 168px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,.5); padding: 5px; }
+.ctx-item { padding: 8px 10px; border-radius: 7px; font-size: 13px; cursor: pointer; color: var(--text); }
+.ctx-item:hover { background: var(--accent); color: #fff; }
+
+.hover-bar { position: fixed; z-index: 90; display: flex; gap: 2px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4); padding: 2px; }
+.hover-bar button { width: 26px; height: 26px; border: none; background: transparent; color: var(--text-2); border-radius: 6px; cursor: pointer; font-size: 14px; }
+.hover-bar button:hover { background: var(--bg-3); color: var(--text); }
+
+.side-panel { position: fixed; top: 70px; right: 16px; width: 300px; max-height: 70vh; z-index: 110; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 18px 50px rgba(0,0,0,.5); display: flex; flex-direction: column; overflow: hidden; }
+.sp-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); font-weight: 700; }
+.sp-body { padding: 8px; overflow-y: auto; }
+.sp-empty { color: var(--text-2); font-size: 13px; padding: 12px; text-align: center; }
+.pin-row { padding: 9px 11px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--border); }
+.pin-row:hover { background: var(--bg-3); }
+.pin-badge { margin-left: 6px; font-size: 11px; filter: grayscale(.2); }
+
+.modal { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 18px; }
+.modal.hidden, .emoji-panel.hidden, .side-panel.hidden, .ctx-menu.hidden, .hover-bar.hidden, .mention-box.hidden, .soundboard.hidden { display: none; }
+.modal-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 440px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.5); max-height: 86vh; overflow: auto; }
+.modal-card h3 { margin: 0 0 12px; }
+.modal-card input { width: 100%; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.search-results, .qs-list { margin-top: 8px; max-height: 50vh; overflow: auto; }
+.search-row { padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); }
+.search-row:hover { background: var(--bg-3); }
+.qs-row { display: flex; flex-direction: column; padding: 9px 11px; border-radius: 8px; cursor: pointer; }
+.qs-row:hover { background: var(--accent); color: #fff; }
+.qs-label { font-weight: 700; font-size: 14px; }
+.qs-sub { font-size: 11px; opacity: .75; }
+
+.mention-box { position: fixed; z-index: 130; min-width: 160px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 36px rgba(0,0,0,.5); overflow: hidden; }
+.mention-item { padding: 8px 11px; font-size: 13px; cursor: pointer; }
+.mention-item.active, .mention-item:hover { background: var(--accent); color: #fff; }
+
+.reactions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; padding-left: 0; }
+.react-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); border-radius: 12px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.react-chip.mine { background: color-mix(in srgb, var(--accent) 30%, var(--bg-3)); border-color: var(--accent); }
+.react-add { width: 26px; height: 22px; border: 1px solid var(--border); background: var(--bg-3); color: var(--text-2); border-radius: 12px; cursor: pointer; }
+.react-add:hover { color: var(--text); }
+
+.poll { background: var(--bg-3); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 4px; min-width: 240px; }
+.poll-q { font-weight: 700; margin-bottom: 8px; }
+.poll-opts { display: flex; flex-direction: column; gap: 6px; }
+.poll-opt { position: relative; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--bg-2); color: var(--text); border-radius: 8px; padding: 7px 10px; cursor: pointer; overflow: hidden; text-align: left; font-size: 13px; }
+.poll-opt.voted { border-color: var(--accent); }
+.poll-bar { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 32%, transparent); z-index: 0; }
+.poll-label, .poll-cnt { position: relative; z-index: 1; }
+.poll-cnt { margin-left: auto; opacity: .8; }
+
+/* Markdown */
+.bubble .md-pre { background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; overflow: auto; max-width: 420px; }
+.bubble .md-code { background: var(--bg-3); border-radius: 5px; padding: 1px 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em; }
+.bubble .md-quote { border-left: 3px solid var(--accent); margin: 4px 0; padding-left: 10px; color: var(--text-2); display: block; }
+.bubble .spoiler { background: #202225; color: #202225; border-radius: 4px; padding: 0 4px; cursor: pointer; user-select: none; }
+.bubble .spoiler.revealed, .bubble .spoiler:hover { color: var(--text); }
+.bubble .mention { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--accent); border-radius: 4px; padding: 0 3px; font-weight: 600; cursor: pointer; }
+.bubble a { color: var(--accent); }
+.forwarded { font-size: 11px; color: var(--text-2); margin-bottom: 2px; opacity: .8; }
+.deleted-msg .bubble { color: var(--text-2); font-style: italic; opacity: .7; }
+.edited-tag { font-size: 10px; color: var(--text-2); margin-left: 6px; opacity: .7; }
+
+.soundboard { position: fixed; bottom: 76px; right: 16px; z-index: 100; display: flex; flex-wrap: wrap; gap: 5px; width: 200px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 8px; box-shadow: 0 12px 36px rgba(0,0,0,.5); }
+.sb-btn { flex: 1 0 40%; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); border-radius: 8px; padding: 7px; cursor: pointer; font-size: 12px; }
+.sb-btn:hover { background: var(--accent); color: #fff; }
+.kb-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; font-size: 13px; }
+.kb-list div { color: var(--text-2); }
+kbd { background: var(--bg-3); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--text); }
+
+.call-extra { position: absolute; top: 12px; left: 14px; display: flex; align-items: center; gap: 8px; z-index: 5; }
+.call-timer { background: rgba(0,0,0,.5); color: #fff; border-radius: 14px; padding: 4px 10px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.call-extra .round { width: 32px; height: 32px; background: rgba(0,0,0,.45); }
+
+.srv-card { max-width: 480px; }
+.srv-body { display: flex; flex-direction: column; gap: 10px; }
+.srv-sec { font-size: 13px; color: var(--text-2); border-top: 1px solid var(--border); padding-top: 8px; }
+.srv-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.srv-dot { width: 12px; height: 12px; border-radius: 50%; }
+.srv-meta { margin-left: auto; opacity: .6; font-size: 11px; }
+.srv-perm { font-size: 11px; color: var(--online); opacity: .85; }
+.srv-audit { font-size: 11px; color: var(--text-2); opacity: .85; }
+.srv-emoji { display: flex; flex-wrap: wrap; gap: 6px; }
+.srv-em { background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px; font-size: 12px; color: var(--text); }
+.fwd-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow: auto; margin-bottom: 10px; }
+.fwd-item { text-align: left; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); border-radius: 8px; padding: 9px 11px; cursor: pointer; font-size: 13px; }
+.fwd-item:hover { background: var(--accent); color: #fff; }
+
+.pm-extra { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pm-pronouns { font-size: 12px; color: var(--text-2); margin: 4px 0; }
+.pm-banner { transition: background .2s ease; }
+
+/* Message grouping (Discord style) */
+.msg.grouped .author, .msg.grouped .avatar { display: none; }
+.msg.grouped .time { display: none; }
+.msg.grouped:hover .time { display: block; position: absolute; left: -52px; font-size: 10px; opacity: .6; }
+.msg.grouped { margin-top: -2px; }
+/* hidden-cam for local video */
+#localVideo.hidden-cam { visibility: hidden; }

@@ -10,5 +10,7 @@ services:
         value: "10000"
       - key: KLIPY_API_KEY
         value: "IvQnxKXOZ682WvuFZX6knCNDXM9Xjbu6xidFZkgYx03VH7Aycc2eLRUVMxXGjGyG"
+      - key: METERED_API_KEY
+        value: "93e04a6c9917094adf34febac7754318f267"
       - key: DOWNLOAD_URL
         value: "https://github.com/microsoftranjit-afk/buddy-chat/releases/download/desktop-latest/Buddy-Setup.exe"

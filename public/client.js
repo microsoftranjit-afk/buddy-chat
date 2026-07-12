@@ -460,7 +460,7 @@
   let profileTarget = null;
   function openProfile(username) {
     const p = profiles.get(username); if (!p) return;
-    profileTarget = username;
+    profileTarget = username; window.__pmTarget = username;
     const av = $("pmAvatar"); av.innerHTML = ""; av.appendChild(avatarEl(p.displayName, p.pic, "xxl"));
     $("pmName").textContent = p.displayName || username;
     $("pmUser").textContent = "@" + username;
@@ -572,6 +572,7 @@
 
   function appendMessage(m) {
     if (m.id && [...messagesEl.children].some((c) => c.dataset.id === m.id)) return;
+    if (m.deleted) return renderDeleted(m);
     const key = dayKey(m.ts || Date.now());
     if (key !== lastDay) {
       lastDay = key;
@@ -579,17 +580,26 @@
       messagesEl.appendChild(sep);
     }
     const mine = m.system ? false : m.user === myUser;
+    let grouped = false;
+    const prev = messagesEl.lastElementChild;
+    if (prev && prev.dataset.user === m.user && prev.dataset.day === key && !m.system) {
+      const pts = +prev.dataset.ts || 0, mts = m.ts || Date.now();
+      if (mts - pts < 5 * 60 * 1000) grouped = true;
+    }
     const el = document.createElement("div");
-    el.className = "msg" + (mine ? " mine" : "") + (m.system ? " system" : "") + (settings.compact ? " compact" : "");
+    el.className = "msg" + (mine ? " mine" : "") + (m.system ? " system" : "") + (settings.compact ? " compact" : "") + (grouped ? " grouped" : "");
     if (m.id) el.dataset.id = m.id;
+    el.dataset.user = m.user || ""; el.dataset.ts = m.ts || Date.now(); el.dataset.day = key;
     if (m.system) { const b = document.createElement("div"); b.className = "bubble"; b.textContent = m.text; el.appendChild(b); }
     else {
       const p = profiles.get(m.user) || { displayName: m.user };
       el.appendChild(avatarEl(p.displayName, p.pic));
       const wrap = document.createElement("div"); wrap.className = "bubble-wrap";
+      if (m.forwarded) { const fwd = document.createElement("div"); fwd.className = "forwarded"; fwd.textContent = "Forwarded from " + nameOf(m.forwarded.from); wrap.appendChild(fwd); }
       const author = document.createElement("div"); author.className = "author"; author.textContent = nameOf(m.user);
       const bubble = document.createElement("div"); bubble.className = "bubble" + (m.kind ? " media" : "");
-      if (m.kind) {
+      if (m.kind === "poll") { renderPoll(bubble, m); }
+      else if (m.kind) {
         if (m.kind === "sticker") { const img = document.createElement("img"); img.src = m.url; img.alt = "sticker"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); bubble.classList.add("sticker"); }
         else if (m.kind === "video") {
           const v = document.createElement("video"); v.src = m.url; v.controls = true; v.playsInline = true; v.preload = "metadata"; bubble.appendChild(v);
@@ -605,13 +615,38 @@
           bubble.classList.add("gif");
         }
         else { const img = document.createElement("img"); img.src = m.url; img.alt = m.kind; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
-      } else { bubble.textContent = m.text; }
+      } else {
+        bubble.innerHTML = renderText(m.text);
+        if (m.edited) { const ed = document.createElement("span"); ed.className = "edited-tag"; ed.textContent = "(edited)"; bubble.appendChild(ed); }
+      }
       const time = document.createElement("div"); time.className = "time"; time.textContent = new Date(m.ts || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      wrap.append(author, bubble, time); el.append(wrap);
+      wrap.append(author, bubble, time);
+      if (m.reactions) renderReactions(el, m);
+      el.append(wrap);
       if (mine) { const del = document.createElement("button"); del.className = "del"; del.title = "Delete"; del.innerHTML = '<svg class="icon"><use href="#icon-trash"/></svg>'; del.addEventListener("click", () => { if (m.id) socket.emit("delete", { id: m.id }); }); el.appendChild(del); }
+      el._msg = m;
     }
     messagesEl.appendChild(el); messagesEl.scrollTop = messagesEl.scrollHeight;
     if (!mine && settings.sound && m.kind !== "sticker" && m.kind !== "gif") playPing();
+  }
+  function renderReactions(el, m) {
+    const bar = document.createElement("div"); bar.className = "reactions";
+    const fill = () => {
+      bar.innerHTML = "";
+      const rs = m.reactions || {};
+      Object.keys(rs).forEach((emoji) => {
+        const users = rs[emoji]; if (!users || !users.length) return;
+        const chip = document.createElement("button"); chip.className = "react-chip" + (users.includes(myUser) ? " mine" : "");
+        chip.innerHTML = '<span class="react-emoji">' + emoji + '</span><span class="react-count">' + users.length + "</span>";
+        chip.title = users.map(nameOf).join(", ");
+        chip.addEventListener("click", () => socket.emit("react", { id: m.id, emoji }));
+        bar.appendChild(chip);
+      });
+      const add = document.createElement("button"); add.className = "react-add"; add.dataset.reactAdd = m.id; add.title = "Add reaction";
+      add.innerHTML = '<svg class="icon"><use href="#icon-plus"/></svg>';
+      bar.appendChild(add);
+    };
+    fill(); el._fillReactions = fill; el._msg = m;
   }
   let pingAudio = null;
   function playPing() { try { if (!pingAudio) { const c = new (window.AudioContext || window.webkitAudioContext)(); pingAudio = c; } const o = pingAudio.createOscillator(); const g = pingAudio.createGain(); o.connect(g); g.connect(pingAudio.destination); o.frequency.value = 660; g.gain.value = 0.04; o.start(); o.stop(pingAudio.currentTime + 0.12); } catch {} }
@@ -632,7 +667,19 @@
 
   socket.on("history", (msgs) => { messagesEl.innerHTML = ""; lastDay = ""; msgs.forEach((m) => appendMessage(m)); });
   socket.on("message", (m) => appendMessage(m));
-  socket.on("deleted", ({ id }) => { const el = [...messagesEl.children].find((c) => c.dataset.id === id); if (el) el.remove(); });
+  socket.on("deleted", ({ id, deleted }) => {
+    const el = [...messagesEl.children].find((c) => c.dataset.id === id);
+    if (!el) return;
+    if (deleted) {
+      el.className = "msg system deleted-msg"; el.innerHTML = ""; el.dataset.id = id;
+      const b = document.createElement("div"); b.className = "bubble"; b.textContent = "Message deleted"; el.appendChild(b);
+    } else el.remove();
+  });
+  socket.on("reacted", ({ id, reactions }) => {
+    const el = [...messagesEl.children].find((c) => c.dataset.id === id); if (!el) return;
+    if (el._msg) el._msg.reactions = reactions;
+    if (el._fillReactions) el._fillReactions();
+  });
   socket.on("channel-info", () => updateHeader());
 
   // ====================================================================
@@ -731,16 +778,16 @@
       const base = mediaKind === "sticker" ? "/api/stickers/" : "/api/gifs/";
       const url = base + (q ? "search?q=" + encodeURIComponent(q) : "trending");
       const res = await fetch(url); const data = await res.json();
-      const arr = (data.data && data.data.data) ? data.data.data : (data.results || data.items || (Array.isArray(data.data) ? data.data : []));
-      if (data.error === "no_key") { status.textContent = "GIFs are not enabled on this server."; return; }
+      if (data.error) { status.textContent = "GIFs are not available right now."; return; }
+      const arr = Array.isArray(data.data) ? data.data : [];
       if (!arr.length) { status.textContent = q ? "No results." : "Nothing found."; return; }
       status.textContent = "";
-      arr.slice(0, 40).forEach((item) => {
-        const m = extractMedia(item, mediaKind); if (!m || !m.full) return;
+      arr.slice(0, 48).forEach((m) => {
+        if (!m || !m.url) return;
         const cell = document.createElement("div"); cell.className = "media-cell";
-        const img = document.createElement("img"); img.src = m.preview || m.full; img.loading = "lazy";
+        const img = document.createElement("img"); img.src = m.preview || m.url; img.loading = "lazy";
         cell.appendChild(img);
-        cell.addEventListener("click", () => { socket.emit("media", { url: m.full, kind: mediaKind, format: m.format }); hideMedia(); });
+        cell.addEventListener("click", () => { socket.emit("media", { url: m.url, kind: mediaKind, format: m.format }); hideMedia(); });
         grid.appendChild(cell);
       });
     } catch { status.textContent = "Could not load media."; }
@@ -1063,6 +1110,87 @@
   //  AUTO-LOGIN
   // ====================================================================
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  // ---- Markdown + mentions + spoilers + emoji rendering ----
+  function renderText(t) {
+    if (t == null) return "";
+    let s = escapeHtml(t);
+    // code blocks ```...```
+    s = s.replace(/```([\s\S]*?)```/g, (m, c) => '<pre class="md-pre"><code>' + c.replace(/^\n/, "") + "</code></pre>");
+    // inline code `...`
+    s = s.replace(/`([^`\n]+)`/g, '<code class="md-code">$1</code>');
+    // blockquote > ...
+    s = s.replace(/(^|\n)&gt;\s?([^\n]+)/g, '$1<blockquote class="md-quote">$2</blockquote>');
+    // bold **x**, italic *x* or _x_, underline __x__, strike ~~x~~
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/__([^_]+)__/g, "<u>$1</u>");
+    s = s.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+    s = s.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>");
+    s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, "$1<em>$2</em>");
+    // spoilers ||x||
+    s = s.replace(/\|\|([^|]+)\|\|/g, '<span class="spoiler">$1</span>');
+    // links
+    s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    // mentions @user @here @everyone and :emoji: (custom emoji replaced by features.js if available)
+    s = s.replace(/@(everyone|here|\w[\w\d_]{2,19})/g, (m, u) => '<span class="mention" data-mention="' + u + '">@' + u + "</span>");
+    return s;
+  }
+  function renderDeleted(m) {
+    const el = document.createElement("div");
+    el.className = "msg system deleted-msg";
+    if (m.id) el.dataset.id = m.id;
+    const b = document.createElement("div"); b.className = "bubble"; b.textContent = "Message deleted";
+    el.appendChild(b); messagesEl.appendChild(el);
+    return;
+  }
+  const polls = new Map();
+  function renderPoll(bubble, m) {
+    polls.set(m.id, { question: m.poll.question, options: m.poll.options });
+    const wrap = document.createElement("div"); wrap.className = "poll";
+    const q = document.createElement("div"); q.className = "poll-q"; q.textContent = m.poll.question; wrap.appendChild(q);
+    const opts = document.createElement("div"); opts.className = "poll-opts"; wrap.appendChild(opts);
+    bubble.appendChild(wrap);
+    updatePollVotes(m.id, m.poll.votes || {});
+  }
+  function updatePollVotes(id, votes) {
+    const el = [...messagesEl.children].find((c) => c.dataset.id === id); if (!el) return;
+    const opts = el.querySelector(".poll-opts"); if (!opts) return;
+    const data = polls.get(id); if (!data) return;
+    const tally = {}; Object.values(votes).forEach((v) => { tally[v] = (tally[v] || 0) + 1; });
+    const total = Object.keys(votes).length;
+    opts.innerHTML = "";
+    data.options.forEach((opt) => {
+      const row = document.createElement("button"); row.className = "poll-opt"; row.type = "button";
+      const mine = votes[myUser] === opt; if (mine) row.classList.add("voted");
+      const cnt = tally[opt] || 0; const pct = total ? Math.round((cnt / total) * 100) : 0;
+      row.innerHTML = '<span class="poll-bar" style="width:' + pct + '%"></span><span class="poll-label">' + escapeHtml(opt) + '</span><span class="poll-cnt">' + cnt + (mine ? " ✓" : "") + "</span>";
+      row.addEventListener("click", () => socket.emit("poll:vote", { id, option: opt }));
+      opts.appendChild(row);
+    });
+  }
+  socket.on("poll:update", ({ id, votes }) => updatePollVotes(id, votes || {}));
+  // expose internals for the features module
+  window.Buddy = {
+    socket, api, flash, openPrompt, profiles, state, escapeHtml, renderText,
+    refreshIce,
+    getICE: () => ICE,
+    sendRaw: (t) => socket.emit("message", t),
+    sendMedia: (url, kind, format) => socket.emit("media", { url, kind, format }),
+    myUser: () => myUser,
+    currentRoom: () => (view === "dm" && activePeer ? dmRoomKey(myUser, activePeer.username) : (view === "server" && activeChannel ? "chan:" + activeChannel : null)),
+    currentView: () => view,
+    activePeer: () => activePeer,
+    activeServer: () => activeServer,
+    activeChannel: () => activeChannel,
+    openDM, selectServer, openChannel, appendMessage, loadMe,
+    setMsgInput: (v) => { msgInput.value = v; msgInput.focus(); },
+    getMsgInput: () => msgInput.value,
+    getMsgInputEl: () => msgInput,
+    call: () => ({ inCall, peer, localStream }),
+    setLocalAudio: (on) => { if (localStream && localStream.getAudioTracks()[0]) localStream.getAudioTracks()[0].enabled = on; },
+    addRecentEmoji: (e) => { try { const k = "buddy-emoji-recent"; let a = JSON.parse(localStorage.getItem(k) || "[]"); a = a.filter((x) => x !== e); a.unshift(e); a = a.slice(0, 24); localStorage.setItem(k, JSON.stringify(a)); } catch {} },
+  };
+
   fetch("/api/version").then((r) => r.json()).then((d) => { const v = d && d.version; if (v) { const a = $("authVersion"), s = $("settingsVersion"); if (a) a.textContent = "v" + v; if (s) s.textContent = "Buddy v" + v; } }).catch(() => {});
   if (token) { authEl.classList.add("hidden"); appEl.classList.remove("hidden"); loadMe(); renderMyIdentityPlaceholder(); }
   function renderMyIdentityPlaceholder() { $("meName").textContent = myName; renderMyAvatar(); $("nameEdit").value = myName; $("userEdit").value = "@" + myUser; renderMyStatus(); }
