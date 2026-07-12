@@ -237,6 +237,15 @@
     } catch {}
   }
   socket.on("friends", (list) => { state.friends = list || []; list.forEach(setProfile); if (view === "dm") renderFriendsDom(); updateHeader(); });
+  socket.on("requests", (r) => {
+    const prev = (state.requests.incoming || []).map((p) => p.username);
+    state.requests = r || { incoming: [], outgoing: [] };
+    (r.incoming || []).forEach(setProfile);
+    (r.outgoing || []).forEach(setProfile);
+    if (view === "dm") renderRequestsDom();
+    const inc = state.requests.incoming || [];
+    if (inc.length && inc.some((p) => !prev.includes(p.username))) flash(inc[inc.length - 1].displayName + " wants to be friends");
+  });
   socket.on("servers", (list) => {
     state.servers = list || [];
     list.forEach((s) => (s.members || []).forEach(setProfile));
