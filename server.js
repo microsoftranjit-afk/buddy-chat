@@ -260,7 +260,7 @@ app.post("/api/signup", (req, res) => {
   if (users[uname]) return res.status(409).json({ error: "That username is taken." });
   if (email) { const lower = email.toLowerCase(); for (const k in users) if (users[k].email && users[k].email.toLowerCase() === lower) return res.status(409).json({ error: "That email is already used." }); }
   const { salt, hash } = hashPassword(password);
-  users[uname] = { username, displayName: (displayName && displayName.trim()) || username, email: email ? email.toLowerCase() : "", salt, hash, pic: "", bio: "", friends: [], incoming: [], outgoing: [], servers: [], presence: "online", status: "" };
+  users[uname] = { username, displayName: (displayName && displayName.trim()) || username, email: email ? email.toLowerCase() : "", salt, hash, pic: "", bio: "", friends: [], incoming: [], outgoing: [], servers: [], blocked: [], presence: "online", status: "" };
   saveUsers();
   const token = newSession(uname);
   res.json({ ok: true, token, profile: publicProfile(uname) });
@@ -338,7 +338,7 @@ app.post("/api/friends/request", (req, res) => {
   if (me.friends.includes(friend)) return res.status(409).json({ error: "You're already friends." });
   if (me.outgoing.includes(friend)) return res.status(409).json({ error: "Friend request already sent." });
   if (me.incoming.includes(friend)) return res.status(409).json({ error: "They already sent you a request." });
-  if (me.blocked.includes(friend) || them.blocked.includes(uname)) return res.status(403).json({ error: "You can't add this user." });
+  if ((me.blocked || []).includes(friend) || (them.blocked || []).includes(uname)) return res.status(403).json({ error: "You can't add this user." });
   me.outgoing.push(friend);
   if (!them.incoming.includes(uname)) them.incoming.push(uname);
   saveUsers();
@@ -387,6 +387,7 @@ app.post("/api/friends/block", (req, res) => {
   if (!validUser(target) || !users[target]) return res.status(400).json({ error: "Invalid user." });
   if (target === uname) return res.status(400).json({ error: "You can't block yourself." });
   const me = users[uname], them = users[target];
+  if (!Array.isArray(me.blocked)) me.blocked = [];
   if (!me.blocked.includes(target)) me.blocked.push(target);
   me.friends = (me.friends || []).filter((f) => f !== target);
   them.friends = (them.friends || []).filter((f) => f !== uname);
