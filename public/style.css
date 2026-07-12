@@ -708,3 +708,186 @@ kbd { background: var(--bg-3); border: 1px solid var(--border); border-bottom-wi
 .msg.grouped { margin-top: -2px; }
 /* hidden-cam for local video */
 #localVideo.hidden-cam { visibility: hidden; }
+
+/* ==================================================================== */
+/*  UI/UX OVERHAUL v2  —  refined tokens, reply system, polish          */
+/* ==================================================================== */
+
+:root {
+  --rail: #16171a;
+  --bg: #1a1b1e;            /* chat surface */
+  --bg-2: #202226;         /* sidebar / panels */
+  --bg-3: #26282d;         /* inputs / raised */
+  --hover: #2b2d33;
+  --active: #34363d;
+  --text: #f4f5f7;
+  --text-2: #c7cbd1;
+  --muted: #8b909a;
+  --bubble-in: #2a2c31;
+  --border: #303237;
+  --border-soft: #2a2c31;
+  --header: #1a1b1e;
+  --shadow: 0 12px 34px rgba(0,0,0,.5);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.28);
+  --ring: color-mix(in srgb, var(--accent) 42%, transparent);
+  --glow: 0 6px 20px color-mix(in srgb, var(--accent) 34%, transparent);
+  --online: #2dc46e;
+  --danger: #f04a52;
+  --radius-panel: 16px;
+}
+[data-theme="light"] {
+  --rail: #e7e9ee;
+  --bg: #ffffff;
+  --bg-2: #f5f6f9;
+  --bg-3: #eceef3;
+  --hover: #e4e6ec;
+  --active: #d6d9e2;
+  --text: #14151a;
+  --text-2: #444750;
+  --muted: #737782;
+  --bubble-in: #f1f3f7;
+  --border: #e0e2ea;
+  --border-soft: #eaecf1;
+  --header: #ffffff;
+  --shadow: 0 12px 34px rgba(20,30,60,.16);
+  --shadow-sm: 0 2px 8px rgba(20,30,60,.08);
+  --online: #17a349;
+}
+
+html, body { font-family: "gg sans", "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif; letter-spacing: .01em; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 40%, transparent); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 60%, transparent); background-clip: padding-box; }
+
+/* ---- Subtle depth on the three columns ---- */
+.rail { background: linear-gradient(180deg, var(--rail), color-mix(in srgb, var(--rail) 88%, #000)); box-shadow: inset -1px 0 0 rgba(0,0,0,.25); }
+.sidebar { box-shadow: inset -1px 0 0 var(--border-soft); }
+.chat-head, .side-head { box-shadow: 0 1px 0 var(--border-soft), 0 4px 14px rgba(0,0,0,.10); border-bottom: 1px solid var(--border-soft); backdrop-filter: blur(6px); }
+
+/* ---- Rail items ---- */
+.rail-item { box-shadow: var(--shadow-sm); }
+.rail-item:not(.home):not(.add):hover, .rail-item:not(.home):not(.add).active { filter: brightness(1.12); box-shadow: var(--glow); }
+.rail-item.home.active, .rail-item.home:hover { box-shadow: var(--glow); }
+
+/* ---- Friends / channels / members: rounder, snappier ---- */
+.friend, .channel, .member { border-radius: 10px; }
+.friend.active { background: color-mix(in srgb, var(--accent) 16%, var(--active)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+.friend.active .friend-name { color: #fff; }
+.channel.active { background: color-mix(in srgb, var(--accent) 14%, var(--active)); color: #fff; }
+
+/* ==================== MESSAGES / BUBBLES ==================== */
+.messages { padding: 20px 22px 10px; scroll-behavior: smooth; }
+.msg { max-width: 74%; }
+.msg .bubble {
+  border-radius: 16px; border-top-left-radius: 6px;
+  padding: 9px 14px; box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-soft);
+  transition: transform .12s ease, box-shadow .15s ease, filter .15s ease;
+}
+.msg .bubble:hover { box-shadow: 0 6px 18px rgba(0,0,0,.28); }
+.msg.mine .bubble {
+  border-radius: 16px; border-top-right-radius: 6px;
+  border: none; box-shadow: var(--glow);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 96%, #fff), var(--accent-2));
+}
+.msg .author { font-size: 13px; font-weight: 700; letter-spacing: .01em; margin-bottom: 1px; }
+.msg .avatar { box-shadow: var(--shadow-sm); }
+.day-sep { background: color-mix(in srgb, var(--bg-2) 92%, transparent); border: 1px solid var(--border-soft); backdrop-filter: blur(4px); box-shadow: var(--shadow-sm); }
+
+/* Highlight when jumping to a replied message */
+@keyframes flashTarget {
+  0% { background: color-mix(in srgb, var(--accent) 26%, transparent); }
+  100% { background: transparent; }
+}
+.msg.flash-target { animation: flashTarget 1.5s ease; border-radius: 12px; }
+
+/* ==================== REPLY REFERENCE (in messages) ==================== */
+.reply-ref {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  margin: 0 2px 4px; padding: 3px 10px 3px 8px;
+  background: color-mix(in srgb, var(--bg-3) 82%, transparent);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px; cursor: pointer;
+  font-size: 12.5px; color: var(--text-2);
+  transition: background .13s ease, transform .1s ease;
+  overflow: hidden;
+}
+.reply-ref:hover { background: color-mix(in srgb, var(--accent) 16%, var(--bg-3)); transform: translateX(1px); }
+.reply-ref-ico { width: 13px; height: 13px; color: var(--accent); flex: 0 0 auto; transform: scaleX(-1); }
+.reply-ref-name { font-weight: 700; color: color-mix(in srgb, var(--accent) 70%, var(--text)); flex: 0 0 auto; }
+.reply-ref-text { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.msg.mine .reply-ref { align-self: flex-end; }
+
+/* ==================== REPLY BAR (above composer) ==================== */
+.reply-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 16px; padding: 9px 8px 9px 14px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px 12px 4px 4px;
+  animation: replyBarIn .18s cubic-bezier(.2,.9,.3,1.2);
+  box-shadow: 0 -4px 14px rgba(0,0,0,.14);
+}
+@keyframes replyBarIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.reply-bar .reply-ico { width: 16px; height: 16px; color: var(--accent); flex: 0 0 auto; transform: scaleX(-1); }
+.reply-bar-text { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reply-bar-text b { color: var(--text); font-weight: 700; }
+.reply-cancel { width: 30px; height: 30px; }
+.reply-cancel .icon { width: 16px; height: 16px; }
+
+/* ==================== COMPOSER ==================== */
+.composer {
+  margin: 8px 16px 18px; padding: 6px 6px 6px 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.composer:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); box-shadow: 0 0 0 3px var(--ring); }
+.reply-bar:not(.hidden) + .composer { border-top-left-radius: 6px; border-top-right-radius: 6px; margin-top: 0; }
+.composer input { background: transparent; box-shadow: none !important; padding: 12px 8px; }
+.composer input:focus { box-shadow: none; }
+.composer .icon-btn { width: 38px; height: 38px; border-radius: 10px; }
+.composer .icon-btn:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.composer .btn.primary { width: 40px; height: 40px; box-shadow: var(--glow); }
+.composer .btn.primary:hover { transform: scale(1.06); }
+.composer .btn.primary:disabled, .composer .icon-btn:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
+
+/* ==================== HOVER TOOLBAR (message actions) ==================== */
+.hover-bar { border-radius: 10px; padding: 3px; gap: 2px; box-shadow: var(--shadow); border-color: var(--border); }
+.hover-bar button { width: 30px; height: 30px; border-radius: 8px; }
+.hover-bar button:hover { background: color-mix(in srgb, var(--accent) 18%, var(--bg-3)); color: var(--accent); }
+.hover-bar .icon { width: 17px; height: 17px; }
+
+/* ==================== BUTTONS / INPUTS refinement ==================== */
+.btn, .primary-btn { border-radius: 10px; }
+.primary-btn { box-shadow: var(--glow); }
+.reset-btn { border-radius: 10px; }
+.field input, .modal-card input, .composer input, .status-menu input { border-radius: 10px; }
+.icon-btn { border-radius: 12px; }
+
+/* ==================== CONTEXT MENU ==================== */
+.ctx-menu { border-radius: 12px; padding: 6px; box-shadow: var(--shadow); }
+.ctx-item { border-radius: 8px; font-weight: 500; }
+
+/* ==================== REACTIONS ==================== */
+.react-chip { border-radius: 14px; transition: transform .1s ease, background .12s ease; }
+.react-chip:hover { transform: translateY(-1px); }
+.react-chip.mine { box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ==================== TOASTS ==================== */
+.toast { border-radius: 14px; }
+
+/* ==================== AUTH refinement ==================== */
+.auth-card { border-radius: var(--radius-panel); border-color: var(--border); }
+.auth-tabs { border-radius: 12px; }
+.auth-tabs button { border-radius: 9px; }
+
+@media (max-width: 720px) {
+  .messages { padding: 14px 12px 8px; }
+  .msg { max-width: 88%; }
+  .composer, .reply-bar { margin-left: 10px; margin-right: 10px; }
+}

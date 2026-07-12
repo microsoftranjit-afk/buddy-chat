@@ -209,7 +209,7 @@
   function doAction(act) {
     const id = ctxMsgId; if (!id) return;
     if (act === "react") { showEmoji("react", id, hover); }
-    else if (act === "reply") { B.setMsgInput(""); /* focus reply later */ flash("Tip: quote to reply with context."); }
+    else if (act === "reply") { B.startReply(id); }
     else if (act === "quote") { B.setMsgInput("> " + getMsgText(id).slice(0, 400) + "\n"); }
     else if (act === "copy") { navigator.clipboard && navigator.clipboard.writeText(getMsgText(id)); flash("Copied."); }
     else if (act === "link") { navigator.clipboard && navigator.clipboard.writeText(location.href.split("#")[0] + "#" + id); flash("Link copied."); }
@@ -225,7 +225,7 @@
     const act = e.target.dataset.act; if (!act) return;
     const el = msgElFrom(e.target); if (!el) return; ctxMsgId = el.dataset.id; hover.classList.add("hidden");
     if (act === "react") showEmoji("react", ctxMsgId, hover);
-    else if (act === "reply") doAction("quote");
+    else if (act === "reply") B.startReply(ctxMsgId);
     else if (act === "more") { const r = el.getBoundingClientRect(); openContext(r.right, r.top); }
   });
   document.getElementById("messages").addEventListener("mouseover", (e) => {

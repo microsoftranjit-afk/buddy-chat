@@ -582,7 +582,7 @@
     const mine = m.system ? false : m.user === myUser;
     let grouped = false;
     const prev = messagesEl.lastElementChild;
-    if (prev && prev.dataset.user === m.user && prev.dataset.day === key && !m.system) {
+    if (prev && prev.dataset.user === m.user && prev.dataset.day === key && !m.system && !m.replyTo && !m.forwarded) {
       const pts = +prev.dataset.ts || 0, mts = m.ts || Date.now();
       if (mts - pts < 5 * 60 * 1000) grouped = true;
     }
@@ -596,6 +596,13 @@
       el.appendChild(avatarEl(p.displayName, p.pic));
       const wrap = document.createElement("div"); wrap.className = "bubble-wrap";
       if (m.forwarded) { const fwd = document.createElement("div"); fwd.className = "forwarded"; fwd.textContent = "Forwarded from " + nameOf(m.forwarded.from); wrap.appendChild(fwd); }
+      const rep = resolveReply(m.replyTo);
+      if (rep) {
+        const rr = document.createElement("div"); rr.className = "reply-ref";
+        rr.innerHTML = '<svg class="icon reply-ref-ico"><use href="#icon-reply"/></svg><span class="reply-ref-name">' + escapeHtml(nameOf(rep.user)) + '</span><span class="reply-ref-text">' + escapeHtml(rep.text) + '</span>';
+        rr.addEventListener("click", (e) => { e.stopPropagation(); jumpToMessage(rep.id); });
+        wrap.appendChild(rr);
+      }
       const author = document.createElement("div"); author.className = "author"; author.textContent = nameOf(m.user);
       const bubble = document.createElement("div"); bubble.className = "bubble" + (m.kind ? " media" : "");
       if (m.kind === "poll") { renderPoll(bubble, m); }
@@ -652,20 +659,65 @@
   function playPing() { try { if (!pingAudio) { const c = new (window.AudioContext || window.webkitAudioContext)(); pingAudio = c; } const o = pingAudio.createOscillator(); const g = pingAudio.createGain(); o.connect(g); g.connect(pingAudio.destination); o.frequency.value = 660; g.gain.value = 0.04; o.start(); o.stop(pingAudio.currentTime + 0.12); } catch {} }
 
   function isMediaUrl(s) { return /^https?:\/\/\S+\.(gif|jpe?g|png|webp|mp4|webm)(\?\S*)?$/i.test(s); }
+
+  // ---- Reply state ----
+  let replyingTo = null; // { id, user, text }
+  function findMsgEl(id) { return id ? [...messagesEl.children].find((c) => c.dataset.id === id) : null; }
+  function previewOfMsg(el, m) {
+    if (m && m.text) return m.text;
+    if (m && m.kind) return ({ image: "Photo", video: "Video", gif: "GIF", sticker: "Sticker", poll: "Poll" }[m.kind] || "Attachment");
+    if (el) { const b = el.querySelector(".bubble"); if (b) { if (el.querySelector(".bubble.media img, .bubble.media video")) return "Attachment"; return (b.textContent || "").trim(); } }
+    return "";
+  }
+  function startReply(id) {
+    const el = findMsgEl(id); if (!el || el.classList.contains("system")) return;
+    const m = el._msg || {};
+    const user = el.dataset.user || m.user || "";
+    const text = previewOfMsg(el, m);
+    replyingTo = { id, user, text };
+    $("replyBarName").textContent = nameOf(user);
+    $("replyBarPreview").textContent = text ? " · " + text.slice(0, 80) : "";
+    $("replyBar").classList.remove("hidden");
+    msgInput.focus();
+  }
+  function clearReply() { replyingTo = null; $("replyBar").classList.add("hidden"); }
+  $("replyCancel").onclick = clearReply;
+
+  function resolveReply(rt) {
+    if (!rt || !rt.id) return null;
+    let user = rt.user, text = rt.text;
+    if (!user || text == null || text === "") {
+      const el = findMsgEl(rt.id);
+      if (el) { user = user || el.dataset.user || ""; if (text == null || text === "") text = previewOfMsg(el, el._msg); }
+    }
+    return { id: rt.id, user: user || "", text: text || "" };
+  }
+  function jumpToMessage(id) {
+    const el = findMsgEl(id); if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.remove("flash-target"); void el.offsetWidth; el.classList.add("flash-target");
+    setTimeout(() => el.classList.remove("flash-target"), 1600);
+  }
+
   function send() {
     const t = msgInput.value.trim(); if (!t) return;
+    const reply = replyingTo ? replyingTo.id : undefined;
     if (isMediaUrl(t)) {
       const isVid = /\.(mp4|webm)(\?|$)/i.test(t);
-      socket.emit("media", { url: t, kind: isVid ? "video" : "image", format: isVid ? "video" : undefined });
+      socket.emit("media", { url: t, kind: isVid ? "video" : "image", format: isVid ? "video" : undefined, replyTo: reply });
     } else {
-      socket.emit("message", t);
+      socket.emit("message", t, reply);
     }
     msgInput.value = "";
+    clearReply();
   }
   $("sendBtn").addEventListener("click", send);
-  msgInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && settings.enter && !msgInput.disabled) { e.preventDefault(); send(); } });
+  msgInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && settings.enter && !msgInput.disabled) { e.preventDefault(); send(); }
+    else if (e.key === "Escape" && replyingTo) { e.preventDefault(); clearReply(); }
+  });
 
-  socket.on("history", (msgs) => { messagesEl.innerHTML = ""; lastDay = ""; msgs.forEach((m) => appendMessage(m)); });
+  socket.on("history", (msgs) => { clearReply(); messagesEl.innerHTML = ""; lastDay = ""; msgs.forEach((m) => appendMessage(m)); });
   socket.on("message", (m) => appendMessage(m));
   socket.on("deleted", ({ id, deleted }) => {
     const el = [...messagesEl.children].find((c) => c.dataset.id === id);
@@ -1183,6 +1235,7 @@
     activeServer: () => activeServer,
     activeChannel: () => activeChannel,
     openDM, selectServer, openChannel, appendMessage, loadMe,
+    startReply, jumpToMessage,
     setMsgInput: (v) => { msgInput.value = v; msgInput.focus(); },
     getMsgInput: () => msgInput.value,
     getMsgInputEl: () => msgInput,
