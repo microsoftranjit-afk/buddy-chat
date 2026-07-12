@@ -113,9 +113,12 @@ screen and in Settings). It hits `GET /download`, which:
   Release asset so the installer works on Render), or
 - serves a locally built installer from `dist/` or `public/download/`.
 
-To host the installer on Render without committing a 75 MB binary, build the
-desktop app (`npm run dist`), create a GitHub Release with the `.exe`, and set
-`DOWNLOAD_URL` (in `render.yaml` or the Render dashboard) to that asset URL.
+The installer is built and published automatically by GitHub Actions
+(`.github/workflows/release.yml`): on every push to `main` it builds the Windows
+installer on a Windows runner and uploads it to the **`desktop-latest`** release
+as `Buddy-Setup.exe`. `render.yaml` sets `DOWNLOAD_URL` to that stable asset URL,
+so the button works on Render without committing a 75 MB binary. To rebuild
+manually, run the workflow from the Actions tab.
 
 ## Notes
 - Chat history is kept in memory on the server (last 500 messages per room).
