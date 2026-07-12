@@ -1151,24 +1151,16 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 
 /* Card */
 .auth-card { position: relative; z-index: 1; width: 100%; max-width: 420px; margin: auto; max-height: 100vh; overflow-y: auto; background: color-mix(in srgb, var(--bg-2) 96%, #fff 4%); border: 1px solid var(--border); border-radius: var(--panel-radius); padding: 40px 34px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px var(--border-soft); animation: popIn .4s cubic-bezier(.2,.9,.3,1.2); }
-.auth-welcome { text-align: center; color: var(--muted); font-size: 14px; margin: -14px 0 22px; font-weight: 500; }
-@keyframes popIn { from { opacity: 0; transform: translateY(18px) scale(.97);} to { opacity:1; transform: none; } }
-.brand-sm { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 22px; }
-.brand-sm .brand-logo { width: 34px; height: 34px; color: var(--accent); }
-.brand-sm h1 { margin: 0; color: var(--text); font-size: 24px; font-weight: 800; letter-spacing: -.5px; }
-.auth-tabs { display: flex; gap: 4px; margin-bottom: 22px; background: var(--bg-3); border-radius: 12px; padding: 4px; }
-.auth-tabs button { flex: 1; padding: 11px; border: none; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; font-size: 14px; transition: .15s; }
-.auth-tabs button.active { background: var(--accent); color: #fff; box-shadow: var(--glow); }
-.auth-tabs button:not(.active):hover { color: var(--text); }
-.field { display: block; margin-bottom: 15px; }
+.auth-welcome { text-align: center; color: var(--muted); font-size: 14px; margin: -12px 0 24px; font-weight: 500; }
+.field { display: block; margin-bottom: 16px; }
 .field > span { display: block; font-size: 11px; font-weight: 800; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
 .field-wrap { display: flex; align-items: center; position: relative; }
-.field-wrap input { width: 100%; padding: 13px 44px 13px 14px; border-radius: 11px; border: 1.5px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 15px; outline: none; font-family: inherit; transition: border-color .15s, box-shadow .15s; }
+.field-wrap input { width: 100%; padding: 13px 46px 13px 14px; border-radius: 11px; border: 1.5px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 15px; outline: none; font-family: inherit; transition: border-color .15s, box-shadow .15s; }
 .field-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.field-ico { position: absolute; right: 12px; width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
-.btn-ico { border: none; background: transparent; cursor: pointer; pointer-events: auto; padding: 0; display: flex; align-items: center; }
-.btn-ico:hover { color: var(--accent); }
-.btn-ico .icon { width: 18px; height: 18px; stroke: currentColor; fill: none; }
+.field-ico { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; color: var(--muted); pointer-events: none; }
+.btn-ico { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); border: none; background: transparent; cursor: pointer; padding: 0; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 8px; transition: color .15s, background .15s; }
+.btn-ico:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.btn-ico .icon { width: 20px; height: 20px; stroke: currentColor; fill: none; }
 .auth-error { background: rgba(242,63,67,.12); color: #ff9b9d; border: 1px solid rgba(242,63,67,.3); padding: 10px 13px; border-radius: 10px; font-size: 13px; margin-bottom: 14px; }
 .primary-btn { width: 100%; padding: 14px; border: none; border-radius: 11px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; transition: filter .15s, transform .08s; position: relative; overflow: hidden; }
 .primary-btn:hover { filter: brightness(1.08); }
