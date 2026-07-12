@@ -70,7 +70,7 @@
   let typingName = null, typingTimer = null;
   function persistAuth() { localStorage.setItem("buddy-token", token); localStorage.setItem("buddy-user", myUser); localStorage.setItem("buddy-name", myName); localStorage.setItem("buddy-pic", myPic); }
   function saveLogin() { if (window.buddyDesktop && window.buddyDesktop.saveLogin) { try { window.buddyDesktop.saveLogin({ token, user: myUser, name: myName, pic: myPic }); } catch {} } }
-  function clearAuth() { token = ""; myUser = ""; myName = ""; myPic = ""; ["buddy-token", "buddy-user", "buddy-name", "buddy-pic"].forEach((k) => localStorage.removeItem(k)); }
+  function clearAuth() { token = ""; myUser = ""; myName = ""; myPic = ""; ["buddy-token", "buddy-user", "buddy-name", "buddy-pic"].forEach((k) => localStorage.removeItem(k)); if (window.buddyDesktop && window.buddyDesktop.clearLogin) { try { window.buddyDesktop.clearLogin(); } catch {} } }
 
   const authEl = $("auth"), appEl = $("app");
   const messagesEl = $("messages"), msgInput = $("msgInput"), connState = $("connState");
@@ -215,7 +215,13 @@
 
   socket.on("connect", () => { setConn("online"); if (token) socket.emit("auth", { token }); });
   socket.on("disconnect", () => setConn("offline"));
-  socket.on("auth-error", () => { clearAuth(); location.reload(); });
+  socket.on("auth-error", () => { clearAuth(); showAuthScreen(); });
+  function showAuthScreen() {
+    try { if (socket && socket.connected) socket.close(); } catch {}
+    authEl.classList.remove("hidden");
+    appEl.classList.add("hidden");
+    const e = $("authError"); if (e) { e.textContent = "Your session expired. Please log in again."; e.classList.remove("hidden"); }
+  }
   socket.on("authed", ({ profile }) => { renderMyIdentity(profile); renderMyAvatar(); saveLogin(); loadMe(); });
 
   function setConn(state) {

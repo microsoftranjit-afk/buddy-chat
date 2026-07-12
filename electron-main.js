@@ -112,6 +112,7 @@ ipcMain.on("buddy:save-login", (_e, d) => saveLogin(d));
 ipcMain.on("buddy:update-download", () => { try { if (autoUpdater) autoUpdater.downloadUpdate(); } catch (e) {} });
 ipcMain.on("buddy:update-install", () => { try { if (autoUpdater) autoUpdater.quitAndInstall(); } catch (e) {} });
 ipcMain.on("buddy:check-updates", () => { try { if (autoUpdater) autoUpdater.checkForUpdates(); } catch (e) {} });
+ipcMain.on("buddy:clear-login", () => { try { if (fs.existsSync(LOGIN_FILE)) fs.unlinkSync(LOGIN_FILE); } catch (e) {} });
 ipcMain.handle("buddy:app-version", () => { try { return require("./package.json").version; } catch (e) { return ""; } });
 
 function setupAutoUpdater() {

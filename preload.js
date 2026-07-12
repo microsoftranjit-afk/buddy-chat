@@ -50,4 +50,7 @@ contextBridge.exposeInMainWorld("buddyDesktop", {
   appVersion: () => {
     return ipcRenderer.invoke("buddy:app-version");
   },
+  clearLogin: () => {
+    ipcRenderer.send("buddy:clear-login");
+  },
 });
