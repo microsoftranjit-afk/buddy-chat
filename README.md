@@ -37,8 +37,8 @@ All preferences are saved per device and applied instantly.
 - **Animated chat backgrounds** — Aurora Flow, Drift and Waves (respect the
   animations toggle). Plus 4 new static patterns (Graph, Polka, Carbon, finer
   Diagonal) — all theme-aware.
-- **Soundboard** — 8 built-in sounds + upload your own; plays for everyone in
-  the room. Use `/sound` too.
+- **Liquid glass mode** — a frosted, refractive glass look for every panel,
+  toggle in Settings → Effects.
 - **Link previews** — pasted URLs render as a neat embed card.
 - **Reaction hover** — hover a reaction chip to see exactly who reacted.
 - **Voice lobby** — start an always-on group voice room from any chat (mesh

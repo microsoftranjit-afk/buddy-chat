@@ -328,16 +328,6 @@ app.get("/download", async (req, res) => {
       res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "file").slice(0, 200), kind: req.file.mimetype.startsWith("video") ? "video" : "image", size: req.file.size });
     });
   });
-  const audioUpload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 }, fileFilter: (req, file, cb) => cb(null, /^audio\//.test(file.mimetype)) });
-  app.post("/api/sound", (req, res) => {
-    const uname = requireUser(req, res); if (!uname) return;
-    if (!rateLimit("sound:" + uname, 20, 60000)) return res.status(429).json({ error: "Slow down." });
-    audioUpload.single("file")(req, res, (err) => {
-      if (err) return res.status(400).json({ error: "Only audio files under 8MB." });
-      if (!req.file) return res.status(400).json({ error: "No file received." });
-      res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "sound").slice(0, 60) });
-    });
-  });
 
 function authToken(req) { const h = req.headers["authorization"] || ""; const t = h.startsWith("Bearer ") ? h.slice(7) : (req.body && req.body.token); return t; }
 function userFromToken(t) { return t ? sessions.get(t) : null; }
@@ -720,7 +710,6 @@ io.on("connection", (socket) => {
   });
 
   socket.on("typing", ({ on }) => { if (socket.activeRoom) socket.to(socket.activeRoom).emit("typing", { from: users[socket.user].displayName, user: socket.user, on: !!on }); });
-  socket.on("sound", ({ url, custom }) => { if (ensureAuth() && socket.activeRoom && canPost(socket.activeRoom, socket.user)) io.to(socket.activeRoom).emit("sound", { url, custom: !!custom }); });
   socket.on("read", ({ ids }) => {
     if (!ensureAuth() || !socket.activeRoom) return;
     const arr = roomMsgs(socket.activeRoom);

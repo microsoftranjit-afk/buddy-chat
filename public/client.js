@@ -124,7 +124,7 @@
   const DEFAULTS = {
     theme: "midnight", accent: "#5865f2", accent2: "", gradient: true,
     bg: "Classic", bgImage: "", radius: 16, fontSize: 15, font: "system",
-    density: "cozy", layout: "bubbles", animations: true, glass: true,
+    density: "cozy", layout: "bubbles", animations: true, glass: true, liquid: false,
     enter: true, compact: false, timestamps: false, sound: false, customCss: "",
   };
   const STORE_KEY = "buddy-settings";
@@ -161,6 +161,7 @@
     root.setAttribute("data-layout", s.layout);
     root.setAttribute("data-anim", s.animations ? "on" : "off");
     root.setAttribute("data-glass", s.glass ? "on" : "off");
+    root.setAttribute("data-liquid", s.liquid ? "on" : "off");
     const msg = document.getElementById("messages");
     if (msg) { msg.classList.remove("bg-anim-aurora", "bg-anim-drift", "bg-anim-waves"); if (bg.animated && s.animations) msg.classList.add("bg-anim-" + (bg.name === "Aurora Flow" ? "aurora" : bg.name === "Drift" ? "drift" : bg.name === "Waves" ? "waves" : "aurora")); }
     applyCustomCss(s.customCss);
@@ -248,7 +249,7 @@
     }
     // Effect + chat toggles
     const t = (id, key) => { if (!$(id)) return; $(id).checked = !!settings[key]; $(id).onchange = (e) => { settings[key] = e.target.checked; applySettings(settings); saveSettings(); }; };
-    t("toggleGradient", "gradient"); t("toggleAnim", "animations"); t("toggleGlass", "glass");
+    t("toggleGradient", "gradient"); t("toggleAnim", "animations"); t("toggleGlass", "glass"); t("toggleLiquid", "liquid");
     t("toggleEnter", "enter"); t("toggleCompact", "compact"); t("toggleTimestamps", "timestamps"); t("toggleSound", "sound");
     // Advanced custom CSS
     if ($("customCss")) {
