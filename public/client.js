@@ -292,6 +292,7 @@
     $("dispField").classList.toggle("hidden", m !== "signup");
     $("emailField").classList.toggle("hidden", m !== "signup");
     $("authBtn").textContent = m === "login" ? "Log in" : "Sign up";
+    const w = $("authWelcome"); if (w) w.textContent = m === "login" ? "Welcome back!" : "Create your account";
     $("authPass").setAttribute("autocomplete", m === "login" ? "current-password" : "new-password");
   }
   $("tabLogin").onclick = () => setMode("login");
@@ -315,7 +316,7 @@
   $("authBtn").onclick = doAuth;
   [$("authUser"), $("authPass"), $("authDisp"), $("authEmail")].forEach((el) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") doAuth(); }));
   const passToggle = $("authPassToggle"), passInput = $("authPass");
-  if (passToggle && passInput) passToggle.onclick = () => { const t = passInput.type === "password"; passInput.type = t ? "text" : "password"; passToggle.innerHTML = t ? '<svg class="icon"><use href="#icon-mic"/></svg>' : '<svg class="icon"><use href="#icon-mic-off"/></svg>'; };
+  if (passToggle && passInput) passToggle.onclick = () => { const t = passInput.type === "password"; passInput.type = t ? "text" : "password"; passToggle.innerHTML = t ? '<svg class="icon"><use href="#icon-eye"/></svg>' : '<svg class="icon"><use href="#icon-eye-off"/></svg>'; };
 
   function enterApp(profile) {
     authEl.classList.add("hidden");

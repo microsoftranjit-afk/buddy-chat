@@ -49,6 +49,8 @@
   <symbol id="icon-pip" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="12" y="12" width="7" height="6" rx="1" fill="currentColor"/></symbol>
   <symbol id="icon-bell" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3a5 5 0 0 0-5 5v4l-2 3v1h14v-1l-2-3V8a5 5 0 0 0-5-5z"/><path fill="currentColor" d="M10 19a2 2 0 1 0 4 0"/></symbol>
   <symbol id="icon-music" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="18" r="2.2" fill="currentColor"/><circle cx="17" cy="16" r="2.2" fill="currentColor"/></symbol>
+  <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="icon-eye-off" viewBox="0 0 24 24"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" stroke-width="2"/></symbol>
   <symbol id="icon-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3l2.6 5.6L21 9.6l-4.5 4.3 1.1 6.1L12 17.8 6.4 20l1.1-6.1L3 9.6l6.4-.9z"/></symbol>
   <symbol id="icon-note" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 9h6M9 13h6" stroke="currentColor" stroke-width="2"/></symbol>
   <symbol id="icon-reply" viewBox="0 0 24 24"><path d="M10 8L5 12l5 4M5 12h9a6 6 0 0 1 6 6v1" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
@@ -89,6 +91,7 @@
           <svg class="brand-logo"><use href="#icon-chat"/></svg>
           <h1>Buddy</h1>
         </div>
+        <p class="auth-welcome" id="authWelcome">Welcome back!</p>
         <div class="auth-tabs">
           <button id="tabLogin" class="active">Log in</button>
           <button id="tabSignup">Sign up</button>
@@ -106,7 +109,7 @@
         <label class="field"><span>Password</span>
           <span class="field-wrap">
             <input id="authPass" type="password" placeholder="••••••" maxlength="200" autocomplete="current-password" />
-            <button type="button" class="field-ico btn-ico" id="authPassToggle" title="Show password"><svg class="icon"><use href="#icon-mic-off"/></svg></button>
+            <button type="button" class="field-ico btn-ico" id="authPassToggle" title="Show password"><svg class="icon"><use href="#icon-eye-off"/></svg></button>
           </span>
         </label>
         <button id="authBtn" class="primary-btn">Log in</button>
