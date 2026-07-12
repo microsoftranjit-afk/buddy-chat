@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -19,11 +22,27 @@ jobs:
         with:
           node-version: 20
 
+      - name: Cache Electron / electron-builder binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: eb-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            eb-${{ runner.os }}-
+
       - name: Install dependencies
         run: npm install
 
       - name: Build Windows installer
         run: npm run dist
+
+      - name: Show build debug log on failure
+        if: failure()
+        run: |
+          if (Test-Path electron-builder-debug.yml) { Get-Content electron-builder-debug.yml }
+          if (Test-Path dist) { Get-ChildItem dist }
 
       - name: Publish release asset
         uses: ncipollo/release-action@v1
