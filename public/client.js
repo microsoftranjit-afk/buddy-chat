@@ -106,14 +106,17 @@
   };
   const BG_PRESETS = [
     { name: "Classic", value: "var(--bg)" },
-    { name: "Dots", value: "radial-gradient(circle at 1px 1px, rgba(130,130,128,.16) 1px, transparent 0) 0 0/20px 20px, var(--bg)" },
-    { name: "Grid", value: "linear-gradient(rgba(130,130,128,.10) 1px,transparent 1px) 0 0/24px 24px, linear-gradient(90deg,rgba(130,130,128,.10) 1px,transparent 1px) 0 0/24px 24px, var(--bg)" },
+    { name: "Dots", value: "radial-gradient(circle at center, color-mix(in srgb, var(--muted) 44%, transparent) 1.6px, transparent 1.8px) 0 0 / 22px 22px, var(--bg)" },
+    { name: "Grid", value: "linear-gradient(color-mix(in srgb, var(--muted) 26%, transparent) 1px, transparent 1px) 0 0 / 26px 26px, linear-gradient(90deg, color-mix(in srgb, var(--muted) 26%, transparent) 1px, transparent 1px) 0 0 / 26px 26px, var(--bg)" },
+    { name: "Graph", value: "linear-gradient(color-mix(in srgb, var(--muted) 34%, transparent) 1px, transparent 1px) 0 0 / 96px 96px, linear-gradient(90deg, color-mix(in srgb, var(--muted) 34%, transparent) 1px, transparent 1px) 0 0 / 96px 96px, linear-gradient(color-mix(in srgb, var(--muted) 14%, transparent) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(90deg, color-mix(in srgb, var(--muted) 14%, transparent) 1px, transparent 1px) 0 0 / 24px 24px, var(--bg)" },
+    { name: "Polka", value: "radial-gradient(circle at center, color-mix(in srgb, var(--accent) 32%, transparent) 2px, transparent 2.6px) 0 0 / 30px 30px, var(--bg)" },
+    { name: "Carbon", value: "linear-gradient(135deg, color-mix(in srgb, var(--muted) 12%, transparent) 25%, transparent 25%) -8px 0 / 16px 16px, linear-gradient(225deg, color-mix(in srgb, var(--muted) 12%, transparent) 25%, transparent 25%) -8px 0 / 16px 16px, linear-gradient(315deg, color-mix(in srgb, var(--muted) 12%, transparent) 25%, transparent 25%) 0 0 / 16px 16px, linear-gradient(45deg, color-mix(in srgb, var(--muted) 12%, transparent) 25%, transparent 25%) 0 0 / 16px 16px, var(--bg)" },
+    { name: "Diagonal", value: "repeating-linear-gradient(45deg, color-mix(in srgb, var(--muted) 8%, var(--bg)) 0 2px, var(--bg) 2px 16px)" },
     { name: "Tint", value: "radial-gradient(circle at 25% 15%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg) 72%)" },
     { name: "Aurora", value: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--bg)), var(--bg) 55%), radial-gradient(60% 60% at 85% 15%, color-mix(in srgb, var(--accent) 12%, transparent), transparent)" },
-    { name: "Smoke", value: "radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg) 65%)" },
+    { name: "Mesh", value: "radial-gradient(40% 40% at 15% 20%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 70%), radial-gradient(45% 45% at 85% 80%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%), var(--bg)" },
     { name: "Glow", value: "radial-gradient(70% 55% at 50% 120%, color-mix(in srgb, var(--accent) 22%, var(--bg)), var(--bg) 70%)" },
-    { name: "Mesh", value: "radial-gradient(40% 40% at 15% 20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), radial-gradient(45% 45% at 85% 80%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--bg)" },
-    { name: "Diagonal", value: "repeating-linear-gradient(45deg, color-mix(in srgb, var(--muted) 6%, var(--bg)) 0 2px, var(--bg) 2px 16px)" },
+    { name: "Smoke", value: "radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg) 65%)" },
   ];
   const DEFAULTS = {
     theme: "midnight", accent: "#5865f2", accent2: "", gradient: true,
