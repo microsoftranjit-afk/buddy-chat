@@ -8,6 +8,7 @@
   const socket = B.socket, api = B.api, flash = B.flash, openPrompt = B.openPrompt;
   const $ = (id) => document.getElementById(id);
   const ce = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+  const IC = (id) => '<svg class="icon"><use href="#icon-' + id + '"/></svg>';
 
   // ---------------------------------------------------------------- Emoji data
   const EMOJI = {
@@ -29,7 +30,7 @@
   let emojiMode = "insert", emojiTargetId = null;
   const emojiPanel = ce("div", "emoji-panel hidden");
   emojiPanel.innerHTML =
-    '<div class="emoji-head"><input id="emojiSearch" placeholder="Search emoji" /><button id="emojiClose" class="icon-btn">✕</button></div>' +
+    '<div class="emoji-head"><input id="emojiSearch" placeholder="Search emoji" /><button id="emojiClose" class="icon-btn">' + IC("close") + '</button></div>' +
     '<div id="emojiCats" class="emoji-cats"></div>' +
     '<div id="emojiGrid" class="emoji-grid"></div>';
   root.appendChild(emojiPanel);
@@ -72,7 +73,7 @@
     if (!q) { renderEmojiGrid(EMOJI[Object.keys(EMOJI)[0]]); return; }
     renderEmojiGrid(EMOJI_FLAT.filter((e) => true).slice(0, 60));
   });
-  const emojiBtn = ce("button", "icon-btn", "😊"); emojiBtn.title = "Emoji"; emojiBtn.id = "emojiBtn";
+  const emojiBtn = ce("button", "icon-btn", IC("emoji")); emojiBtn.title = "Emoji"; emojiBtn.id = "emojiBtn";
   emojiBtn.onclick = () => showEmoji("insert", null, emojiBtn);
   const composer = document.querySelector(".composer");
   if (composer) composer.insertBefore(emojiBtn, composer.querySelector("#mediaBtn"));
@@ -167,16 +168,16 @@
 
   // ============================================================ HEADER TOOLBAR (search, pins, bookmarks)
   const headerTools = ce("div", "header-tools");
-  const searchBtn = ce("button", "icon-btn", "🔍"); searchBtn.title = "Search messages";
-  const pinsBtn = ce("button", "icon-btn", "📌"); pinsBtn.title = "Pinned messages";
-  const bookBtn = ce("button", "icon-btn", "🔖"); bookBtn.title = "Saved messages";
+  const searchBtn = ce("button", "icon-btn", IC("search")); searchBtn.title = "Search messages";
+  const pinsBtn = ce("button", "icon-btn", IC("pin")); pinsBtn.title = "Pinned messages";
+  const bookBtn = ce("button", "icon-btn", IC("bookmark")); bookBtn.title = "Saved messages";
   headerTools.append(searchBtn, pinsBtn, bookBtn);
   const chatActions = document.querySelector(".chat-actions");
   if (chatActions) chatActions.prepend(headerTools);
 
   // ============================================================ CONTEXT MENU + HOVER TOOLBAR
   const ctx = ce("div", "ctx-menu hidden"); root.appendChild(ctx);
-  const hover = ce("div", "hover-bar hidden"); hover.innerHTML = '<button data-act="react" title="React">😊</button><button data-act="reply" title="Reply">↩</button><button data-act="more" title="More">⋯</button>';
+  const hover = ce("div", "hover-bar hidden"); hover.innerHTML = '<button data-act="react" title="React">' + IC("emoji") + '</button><button data-act="reply" title="Reply">' + IC("reply") + '</button><button data-act="more" title="More">' + IC("more") + '</button>';
   root.appendChild(hover);
   let ctxMsgId = null;
   function msgElFrom(target) { return target.closest ? target.closest(".msg") : null; }
@@ -247,7 +248,7 @@
   // ============================================================ PINNED PANEL
   let pinnedIds = new Set();
   const pinsPanel = ce("div", "side-panel hidden");
-  pinsPanel.innerHTML = '<div class="sp-head"><span>Pinned messages</span><button id="pinsClose" class="icon-btn">✕</button></div><div id="pinsBody" class="sp-body"></div>';
+  pinsPanel.innerHTML = '<div class="sp-head"><span>Pinned messages</span><button id="pinsClose" class="icon-btn">' + IC("close") + '</button></div><div id="pinsBody" class="sp-body"></div>';
   root.appendChild(pinsPanel);
   $("pinsClose").onclick = () => pinsPanel.classList.add("hidden");
   pinsBtn.onclick = () => { renderPins(); pinsPanel.classList.toggle("hidden"); };
@@ -256,7 +257,7 @@
     document.querySelectorAll("#messages .msg").forEach((el) => {
       if (!el.dataset.id) return;
       let badge = el.querySelector(".pin-badge");
-      if (pinnedIds.has(el.dataset.id)) { if (!badge) { badge = ce("span", "pin-badge", "📌"); el.querySelector(".bubble-wrap").appendChild(badge); } }
+      if (pinnedIds.has(el.dataset.id)) {       if (!badge) { badge = ce("span", "pin-badge", IC("pin")); el.querySelector(".bubble-wrap").appendChild(badge); } }
       else if (badge) badge.remove();
     });
   }
@@ -274,7 +275,7 @@
 
   // ============================================================ BOOKMARKS PANEL
   const bookPanel = ce("div", "side-panel hidden");
-  bookPanel.innerHTML = '<div class="sp-head"><span>Saved messages</span><button id="bookClose" class="icon-btn">✕</button></div><div id="bookBody" class="sp-body"></div>';
+  bookPanel.innerHTML = '<div class="sp-head"><span>Saved messages</span><button id="bookClose" class="icon-btn">' + IC("close") + '</button></div><div id="bookBody" class="sp-body"></div>';
   root.appendChild(bookPanel);
   $("bookClose").onclick = () => bookPanel.classList.add("hidden");
   bookBtn.onclick = async () => {
@@ -391,7 +392,7 @@
     srvPanel.classList.remove("hidden");
   }
   $("srvClose").onclick = () => srvPanel.classList.add("hidden");
-  const srvBtn = ce("button", "icon-btn", "⚙"); srvBtn.title = "Server settings"; srvBtn.id = "srvBtn";
+  const srvBtn = ce("button", "icon-btn", IC("gear")); srvBtn.title = "Server settings"; srvBtn.id = "srvBtn";
   srvBtn.onclick = openSrvSettings;
   if (chatActions) chatActions.prepend(srvBtn);
   function escape(s) { return s; }
@@ -430,7 +431,7 @@
     }
   });
   function currentRoomOf(m) { return B.currentRoom(); }
-  const notifBtn = ce("button", "reset-btn", "🔔 Enable notifications"); notifBtn.style.marginTop = "8px";
+  const notifBtn = ce("button", "reset-btn", IC("bell") + " Enable notifications"); notifBtn.style.marginTop = "8px";
   notifBtn.onclick = async () => { if (!("Notification" in window)) return flash("Not supported."); const p = await Notification.requestPermission(); notifOn = p === "granted"; flash(p === "granted" ? "Notifications on." : "Notifications blocked."); notifBtn.style.display = "none"; };
   const blockedSec = document.querySelector(".set-section"); // append to first settings section as a simple hook
   const setChat = [...document.querySelectorAll(".set-section")].find((s) => s.querySelector("h3") && s.querySelector("h3").textContent === "Chat");
@@ -438,7 +439,7 @@
 
   // ============================================================ CALL EXTRAS (timer, PiP, TURN status)
   const callExtra = ce("div", "call-extra hidden");
-  callExtra.innerHTML = '<span id="callTimer">00:00</span><button id="callPip" class="round" title="Picture in picture">⧉</button>';
+  callExtra.innerHTML = '<span id="callTimer">00:00</span><button id="callPip" class="round" title="Picture in picture">' + IC("pip") + '</button>';
   const callBar = document.querySelector(".call-bar");
   if (callBar) callBar.prepend(callExtra);
   let callStart = 0, callTick = null;
@@ -455,7 +456,7 @@
   const sbPanel = ce("div", "soundboard hidden");
   const SOUNDS = [["Ding", 880], ["Coin", 1320], ["Level up", 660], ["Airhorn", 220], ["Tada", 1046], ["Blip", 520]];
   SOUNDS.forEach(([n, f]) => { const b = ce("button", "sb-btn", n); b.onclick = () => playTone(f); sbPanel.appendChild(b); });
-  const sbToggle = ce("button", "icon-btn", "🎵"); sbToggle.title = "Soundboard"; sbToggle.onclick = () => sbPanel.classList.toggle("hidden");
+  const sbToggle = ce("button", "icon-btn", IC("music")); sbToggle.title = "Soundboard"; sbToggle.onclick = () => sbPanel.classList.toggle("hidden");
   if (chatActions) chatActions.prepend(sbToggle);
   root.appendChild(sbPanel);
   function playTone(freq) { try { const ac = new (window.AudioContext || window.webkitAudioContext)(); const o = ac.createOscillator(), g = ac.createGain(); o.connect(g); g.connect(ac.destination); o.frequency.value = freq; g.gain.value = 0.08; o.start(); o.stop(ac.currentTime + 0.25); } catch {} }
@@ -496,8 +497,8 @@
       box.innerHTML = "";
       const u = B.profiles.get(p.username) || {};
       const fav = (B.state.friends || []).some((f) => f.username === p.username);
-      const favBtn = ce("button", "reset-btn", fav ? "★ Favorited" : "☆ Favorite"); favBtn.onclick = () => api("/api/friends/favorite", { target: p.username, on: !fav }, true).then(() => { flash("Updated."); extendProfile(p); });
-      const noteBtn = ce("button", "reset-btn", "📝 Note"); noteBtn.onclick = () => openPrompt("Private note", "Note", (n) => api("/api/friends/note", { target: p.username, note: n }, true).then(() => flash("Note saved.")));
+      const favBtn = ce("button", "reset-btn", IC("star") + (fav ? "Favorited" : "Favorite")); favBtn.onclick = () => api("/api/friends/favorite", { target: p.username, on: !fav }, true).then(() => { flash("Updated."); extendProfile(p); });
+      const noteBtn = ce("button", "reset-btn", IC("note") + "Note"); noteBtn.onclick = () => openPrompt("Private note", "Note", (n) => api("/api/friends/note", { target: p.username, note: n }, true).then(() => flash("Note saved.")));
       const nickBtn = ce("button", "reset-btn", "Nickname"); nickBtn.onclick = () => openPrompt("Friend nickname", "Nickname", (n) => api("/api/friends/nick", { target: p.username, nick: n }, true).then(() => flash("Nickname saved.")));
       box.append(favBtn, noteBtn, nickBtn);
     }
