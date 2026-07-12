@@ -181,6 +181,11 @@ function rateLimit(key, max, windowMs) {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 app.get("/healthz", (req, res) => res.json({ ok: true }));
+app.get("/api/version", (req, res) => {
+  let v = "";
+  try { v = require("./package.json").version; } catch {}
+  res.json({ version: v, name: "Buddy" });
+});
 
 app.get("/api/config", (req, res) => {
   const ice = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
@@ -511,10 +516,12 @@ io.on("connection", (socket) => {
     const reply = replyTo ? (() => { const m = findMsg(socket.activeRoom, replyTo); return m ? { id: m.id, user: m.user, text: (m.text || (m.kind ? m.kind : "")).slice(0, 80) } : null; })() : null;
     deliver(socket.activeRoom, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, text: String(text).slice(0, 4000), ts: Date.now(), replyTo: reply }, socket.user);
   });
-  socket.on("media", ({ url, kind, replyTo }) => {
+  socket.on("media", ({ url, kind, format, replyTo }) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
     if (!/^https?:\/\//.test(url)) return;
-    deliver(socket.activeRoom, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: kind === "sticker" ? "sticker" : "gif", url: url.slice(0, 2000), ts: Date.now(), replyTo: replyTo ? { id: replyTo } : null }, socket.user);
+    const k = ["gif", "sticker", "image", "video"].includes(kind) ? kind : "gif";
+    const isVideo = k === "video" || format === "video";
+    deliver(socket.activeRoom, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: k, format: isVideo ? "video" : undefined, url: url.slice(0, 2000), ts: Date.now(), replyTo: replyTo ? { id: replyTo } : null }, socket.user);
   });
   socket.on("file", ({ url, kind, name, size, replyTo }) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;

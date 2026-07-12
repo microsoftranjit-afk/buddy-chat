@@ -114,6 +114,7 @@ html, body {
 .dl-btn:active { transform: translateY(1px); }
 .dl-btn .icon { width: 22px; height: 22px; fill: #fff; stroke: none; }
 .dl-note { text-align: center; color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.set-version { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0 0; }
 
 /* ===================== APP ===================== */
 .app { height: 100%; display: grid; grid-template-columns: 72px 260px 1fr; position: relative; }

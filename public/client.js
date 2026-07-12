@@ -487,6 +487,14 @@
           const cap = document.createElement("div"); cap.className = "file-size"; cap.style.padding = "6px 4px 2px"; cap.textContent = "Video" + (m.size ? " · " + fmtSize(m.size) : ""); bubble.appendChild(cap);
         }
         else if (m.kind === "image") { const img = document.createElement("img"); img.src = m.url; img.alt = m.name || "image"; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
+        else if (m.kind === "gif") {
+          if (m.format === "video") {
+            const v = document.createElement("video"); v.src = m.url; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.preload = "auto"; v.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(v);
+          } else {
+            const img = document.createElement("img"); img.src = m.url; img.alt = "GIF"; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img);
+          }
+          bubble.classList.add("gif");
+        }
         else { const img = document.createElement("img"); img.src = m.url; img.alt = m.kind; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
       } else { bubble.textContent = m.text; }
       const time = document.createElement("div"); time.className = "time"; time.textContent = new Date(m.ts || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -499,7 +507,17 @@
   let pingAudio = null;
   function playPing() { try { if (!pingAudio) { const c = new (window.AudioContext || window.webkitAudioContext)(); pingAudio = c; } const o = pingAudio.createOscillator(); const g = pingAudio.createGain(); o.connect(g); g.connect(pingAudio.destination); o.frequency.value = 660; g.gain.value = 0.04; o.start(); o.stop(pingAudio.currentTime + 0.12); } catch {} }
 
-  function send() { const t = msgInput.value.trim(); if (!t) return; socket.emit("message", t); msgInput.value = ""; }
+  function isMediaUrl(s) { return /^https?:\/\/\S+\.(gif|jpe?g|png|webp|mp4|webm)(\?\S*)?$/i.test(s); }
+  function send() {
+    const t = msgInput.value.trim(); if (!t) return;
+    if (isMediaUrl(t)) {
+      const isVid = /\.(mp4|webm)(\?|$)/i.test(t);
+      socket.emit("media", { url: t, kind: isVid ? "video" : "image", format: isVid ? "video" : undefined });
+    } else {
+      socket.emit("message", t);
+    }
+    msgInput.value = "";
+  }
   $("sendBtn").addEventListener("click", send);
   msgInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && settings.enter && !msgInput.disabled) { e.preventDefault(); send(); } });
 
@@ -573,11 +591,22 @@
     const file = item && item.file;
     if (file && (file.hd || file.md)) {
       const hd = file.hd || {}, md = file.md || {};
-      const fullList = kind === "sticker" ? ["webp", "png", "gif"] : ["mp4", "gif", "webp"];
+      const fullList = kind === "sticker" ? ["webp", "png", "gif"] : ["gif", "mp4", "webp"];
       const prevList = ["gif", "webp", "png", "jpg"];
-      const full = pickFrom(hd, fullList) || pickFrom(md, fullList);
-      const preview = pickFrom(md, prevList) || pickFrom(hd, prevList) || full;
-      if (full) return { full, preview: preview || full };
+      for (const f of fullList) {
+        const u = hd[f] || md[f];
+        if (u) {
+          const preview = prevList.map((p) => hd[p] || md[p]).find(Boolean) || u;
+          const format = (f === "mp4" || f === "webm") ? "video" : "gif";
+          return { full: u, preview, format };
+        }
+      }
+    }
+    // Fallback: some providers put a direct media url on the item.
+    const direct = (item && (item.url || item.media_url || item.content_url));
+    if (direct) {
+      const format = /\.(mp4|webm)(\?|$)/i.test(direct) ? "video" : "gif";
+      return { full: direct, preview: direct, format };
     }
     return null;
   }
@@ -597,7 +626,7 @@
         const cell = document.createElement("div"); cell.className = "media-cell";
         const img = document.createElement("img"); img.src = m.preview || m.full; img.loading = "lazy";
         cell.appendChild(img);
-        cell.addEventListener("click", () => { socket.emit("media", { url: m.full, kind: mediaKind }); hideMedia(); });
+        cell.addEventListener("click", () => { socket.emit("media", { url: m.full, kind: mediaKind, format: m.format }); hideMedia(); });
         grid.appendChild(cell);
       });
     } catch { status.textContent = "Could not load media."; }
@@ -659,9 +688,10 @@
     });
     mic.value = devices.mic; spk.value = devices.speaker;
   }
+  function applySpeaker() { if (remoteVideo && devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {}); }
   $("deviceRefresh").onclick = refreshDevices;
-  $("micSelect").onchange = (e) => { devices.mic = e.target.value; saveDevices(); if (localStream) restartStream(); };
-  $("speakerSelect").onchange = (e) => { devices.speaker = e.target.value; saveDevices(); if (remoteVideo && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {}); };
+  $("micSelect").onchange = (e) => { devices.mic = e.target.value; saveDevices(); if (localStream && inCall) restartStream(); else if (localStream) { const a = localStream.getAudioTracks()[0]; if (a) a.enabled = true; } };
+  $("speakerSelect").onchange = (e) => { devices.speaker = e.target.value; saveDevices(); applySpeaker(); };
   if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) refreshDevices();
 
   // ====================================================================
@@ -683,12 +713,26 @@
     return pc;
   }
   async function restartStream() {
-    if (!peer) return;
-    const newStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: devices.mic ? { deviceId: { exact: devices.mic } } : true });
-    localStream.getTracks().forEach((t) => t.stop());
-    localStream = newStream; localVideo.srcObject = localStream;
+    if (!peer || !localStream) return;
+    const hadVideo = localStream.getVideoTracks().length > 0;
+    const videoEnabled = hadVideo ? localStream.getVideoTracks()[0].enabled : true;
+    const audioEnabled = localStream.getAudioTracks()[0] ? localStream.getAudioTracks()[0].enabled : true;
+    const constraints = { audio: devices.mic ? { deviceId: { exact: devices.mic } } : true };
+    if (hadVideo) constraints.video = true;
+    let newStream;
+    try { newStream = await navigator.mediaDevices.getUserMedia(constraints); }
+    catch (e) { console.error("Could not switch input device:", e); flash("Could not switch microphone."); return; }
+    const oldStream = localStream;
+    localStream = newStream;
+    localVideo.srcObject = localStream;
     const senders = peer.getSenders();
-    localStream.getTracks().forEach((t) => { const s = senders.find((x) => x.track && x.track.kind === t.kind); if (s) s.replaceTrack(t); else peer.addTrack(t, localStream); });
+    newStream.getTracks().forEach((t) => {
+      const s = senders.find((x) => x.track && x.track.kind === t.kind);
+      if (s) s.replaceTrack(t); else peer.addTrack(t, localStream);
+    });
+    if (localStream.getVideoTracks()[0]) localStream.getVideoTracks()[0].enabled = videoEnabled;
+    if (localStream.getAudioTracks()[0]) localStream.getAudioTracks()[0].enabled = audioEnabled;
+    oldStream.getTracks().forEach((t) => t.stop());
   }
   async function startCall(asInitiator) {
     const audio = devices.mic ? { deviceId: { exact: devices.mic } } : true;
@@ -773,6 +817,7 @@
   //  AUTO-LOGIN
   // ====================================================================
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+  fetch("/api/version").then((r) => r.json()).then((d) => { const v = d && d.version; if (v) { const a = $("authVersion"), s = $("settingsVersion"); if (a) a.textContent = "v" + v; if (s) s.textContent = "Buddy v" + v; } }).catch(() => {});
   if (token) { authEl.classList.add("hidden"); appEl.classList.remove("hidden"); loadMe(); renderMyIdentityPlaceholder(); }
   function renderMyIdentityPlaceholder() { $("meName").textContent = myName; renderMyAvatar(); $("nameEdit").value = myName; $("userEdit").value = "@" + myUser; renderMyStatus(); }
 })();
