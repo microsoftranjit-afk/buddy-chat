@@ -69,7 +69,7 @@ html, body {
 .brand-logo { fill: currentColor; display: block; }
 
 /* ===================== AUTH ===================== */
-.auth { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: hidden; background: #313338; }
+.auth { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: auto; background: #313338; }
 .auth-bg {
   position: absolute; inset: -20%;
   background:
@@ -1125,11 +1125,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 /*  AUTH REDESIGN v2  —  split hero + glass card                         */
 /* ==================================================================== */
 .auth { background: var(--rail); }
-.auth-split { position: relative; z-index: 1; width: 100%; height: 100%; display: grid; grid-template-columns: 1.1fr 460px; }
-@media (min-width: 1100px) { .auth-split { grid-template-columns: 1.15fr 480px; } }
-
-/* Hero panel */
-.auth-hero { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 6vh 6vw; color: #fff; background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 82%, #0a0c11), color-mix(in srgb, var(--accent-2) 64%, #0a0c11) 70%); isolation: isolate; }
+.auth-split { position: relative; z-index: 1; width: 100%; min-height: 100%; display: flex; align-items: stretch; }
+.auth-hero { position: relative; overflow: hidden; display: flex; flex: 1 1 auto; flex-direction: column; justify-content: center; padding: 6vh 6vw; color: #fff; background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 82%, #0a0c11), color-mix(in srgb, var(--accent-2) 64%, #0a0c11) 70%); isolation: isolate; }
 .auth-hero::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.14) 1.4px, transparent 1.6px); background-size: 30px 30px; opacity: .25; -webkit-mask-image: radial-gradient(80% 70% at 30% 30%, #000, transparent 80%); mask-image: radial-gradient(80% 70% at 30% 30%, #000, transparent 80%); z-index: -1; }
 .hero-orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55; z-index: -1; animation: orbFloat 18s ease-in-out infinite alternate; }
 .hero-orb.o1 { width: 360px; height: 360px; left: -120px; top: -80px; background: color-mix(in srgb, #fff 22%, transparent); }
@@ -1150,9 +1147,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 @media (max-width: 860px) { .auth-hero { display: none; } .auth-split { grid-template-columns: 1fr; } .auth-card { margin: auto; } }
 
 /* Card */
-.auth-card { position: relative; z-index: 1; width: 100%; max-width: 420px; margin: auto; max-height: 100vh; overflow-y: auto; background: color-mix(in srgb, var(--bg-2) 96%, #fff 4%); border: 1px solid var(--border); border-radius: var(--panel-radius); padding: 40px 34px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px var(--border-soft); animation: popIn .4s cubic-bezier(.2,.9,.3,1.2); }
+.auth-card { position: relative; z-index: 1; flex: none; width: 460px; max-width: 100%; align-self: center; margin: 0; max-height: calc(100vh - 32px); overflow-y: auto; background: color-mix(in srgb, var(--bg-2) 96%, #fff 4%); border: 1px solid var(--border); border-radius: var(--panel-radius); padding: 34px 34px; box-shadow: 0 30px 80px rgba(0,0,0,.55), 0 0 0 1px var(--border-soft); animation: popIn .4s cubic-bezier(.2,.9,.3,1.2); }
 .auth-welcome { text-align: center; color: var(--muted); font-size: 14px; margin: -12px 0 24px; font-weight: 500; }
-.field { display: block; margin-bottom: 16px; }
+.field { display: block; margin-bottom: 18px; }
 .field > span { display: block; font-size: 11px; font-weight: 800; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .05em; }
 .field-wrap { display: flex; align-items: center; position: relative; }
 .field-wrap input { width: 100%; padding: 13px 46px 13px 14px; border-radius: 11px; border: 1.5px solid var(--border); background: var(--bg-3); color: var(--text); font-size: 15px; outline: none; font-family: inherit; transition: border-color .15s, box-shadow .15s; }
