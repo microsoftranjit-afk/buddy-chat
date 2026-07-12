@@ -44,7 +44,7 @@
 
 * { box-sizing: border-box; }
 html, body {
-  margin: 0; height: 100%;
+  margin: 0; height: 100%; width: 100%; overflow: hidden;
   font-family: "gg sans", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   background: var(--rail); color: var(--text);
   font-size: var(--font-size);
@@ -135,7 +135,7 @@ html, body {
 .set-version { text-align: center; color: var(--muted); font-size: 11px; margin: 10px 0 0; }
 
 /* ===================== APP ===================== */
-.app { height: 100%; display: grid; grid-template-columns: 72px 260px 1fr; position: relative; }
+.app { height: 100vh; height: 100dvh; display: grid; grid-template-columns: 72px 260px 1fr; position: relative; overflow: hidden; }
 
 /* Server rail */
 .rail { background: var(--rail); display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 12px 0; }
