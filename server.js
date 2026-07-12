@@ -188,6 +188,21 @@ app.get("/api/config", (req, res) => {
   res.json({ iceServers: ice });
 });
 
+// ---- Desktop app download ----
+// Redirects to DOWNLOAD_URL if set (e.g. a GitHub release), otherwise serves a
+// locally built installer from dist/ or public/download/.
+app.get("/download", (req, res) => {
+  if (process.env.DOWNLOAD_URL) return res.redirect(process.env.DOWNLOAD_URL);
+  const candidates = [];
+  for (const dir of [path.join(__dirname, "dist"), path.join(__dirname, "public", "download")]) {
+    try {
+      for (const f of fs.readdirSync(dir)) if (/\.exe$/i.test(f)) candidates.push(path.join(dir, f));
+    } catch {}
+  }
+  if (!candidates.length) return res.status(404).send("No desktop installer available.");
+  res.download(candidates[0], path.basename(candidates[0]));
+});
+
 app.post("/api/upload", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   if (!rateLimit("upload:" + uname, 30, 60000)) return res.status(429).json({ error: "Slow down." });

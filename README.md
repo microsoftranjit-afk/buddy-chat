@@ -104,6 +104,22 @@ const STUN = {
 Free TURN credentials: [metered.ca](https://metered.ca) (free tier) or
 [openrelay](https://www.metered.ca/tools/openrelay).
 
+## Desktop app download on the website
+
+The web app shows a prominent **Download Buddy for Windows** button (on the login
+screen and in Settings). It hits `GET /download`, which:
+
+- redirects to `DOWNLOAD_URL` if that env var is set (point it at a GitHub
+  Release asset so the installer works on Render), or
+- serves a locally built installer from `dist/` or `public/download/`.
+
+To host the installer on Render without committing a 75 MB binary, build the
+desktop app (`npm run dist`), create a GitHub Release with the `.exe`, and set
+`DOWNLOAD_URL` (in `render.yaml` or the Render dashboard) to that asset URL.
+
+## Notes
+- Chat history is kept in memory on the server (last 500 messages per room).
+
 ## Notes
 - Chat history is kept in memory on the server (last 500 messages per room).
   Restarting the server clears it. It's not end-to-end encrypted — fine for

@@ -56,6 +56,12 @@
       <label class="field hidden" id="dispField"><span>Display name</span><input id="authDisp" type="text" placeholder="e.g. Alex" maxlength="32" autocomplete="off" /></label>
       <label class="field"><span>Password</span><input id="authPass" type="password" placeholder="••••••" maxlength="200" autocomplete="current-password" /></label>
       <button id="authBtn" class="primary-btn">Log in</button>
+      <div class="auth-divider"><span>or</span></div>
+      <a id="downloadBtn" class="dl-btn" href="/download">
+        <svg class="icon"><use href="#icon-download"/></svg>
+        <span>Download Buddy for Windows</span>
+      </a>
+      <p class="dl-note">Free desktop app · Windows 10/11</p>
       <p class="auth-foot">Messages and calls stay between you and your friends.</p>
     </div>
   </div>
@@ -270,6 +276,10 @@
           <label class="slider-row"><span>Text size</span><span id="fontVal" class="slider-val">15px</span><input type="range" id="fontRange" min="12" max="20" value="15" /></label>
         </section>
 
+        <a id="settingsDownload" class="set-dl" href="/download">
+          <svg class="icon"><use href="#icon-download"/></svg>
+          <span>Download Buddy for Windows</span>
+        </a>
         <button id="resetSettings" class="reset-btn">Reset appearance</button>
         <button id="logoutBtn2" class="reset-btn" style="margin-top:8px;color:#e2575b;border-color:#e2575b">Log out</button>
       </div>
