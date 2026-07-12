@@ -657,7 +657,8 @@ html, body {
 .poll-opt.voted { border-color: var(--accent); }
 .poll-bar { position: absolute; left: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 32%, transparent); z-index: 0; }
 .poll-label, .poll-cnt { position: relative; z-index: 1; }
-.poll-cnt { margin-left: auto; opacity: .8; }
+.poll-cnt { margin-left: auto; opacity: .8; display: inline-flex; align-items: center; gap: 4px; }
+.poll-check { width: 14px; height: 14px; stroke: var(--accent); opacity: 1; }
 
 /* Markdown */
 .bubble .md-pre { background: var(--bg-3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; overflow: auto; max-width: 420px; }

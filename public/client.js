@@ -1163,7 +1163,7 @@
       const row = document.createElement("button"); row.className = "poll-opt"; row.type = "button";
       const mine = votes[myUser] === opt; if (mine) row.classList.add("voted");
       const cnt = tally[opt] || 0; const pct = total ? Math.round((cnt / total) * 100) : 0;
-      row.innerHTML = '<span class="poll-bar" style="width:' + pct + '%"></span><span class="poll-label">' + escapeHtml(opt) + '</span><span class="poll-cnt">' + cnt + (mine ? " ✓" : "") + "</span>";
+      row.innerHTML = '<span class="poll-bar" style="width:' + pct + '%"></span><span class="poll-label">' + escapeHtml(opt) + '</span><span class="poll-cnt">' + cnt + (mine ? ' <svg class="icon poll-check"><use href="#icon-check"/></svg>' : "") + "</span>";
       row.addEventListener("click", () => socket.emit("poll:vote", { id, option: opt }));
       opts.appendChild(row);
     });
