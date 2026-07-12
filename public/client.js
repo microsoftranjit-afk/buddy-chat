@@ -885,6 +885,7 @@
       if (s === "connected" || s === "completed") {
         if (callFailTimer) { clearTimeout(callFailTimer); callFailTimer = null; }
         callStatus.textContent = "Connected";
+        setTimeout(() => updateCallRoute(pc), 1000);
       } else if (s === "failed") {
         if (callFailTimer) { clearTimeout(callFailTimer); callFailTimer = null; }
         callStatus.textContent = "Call failed";
@@ -894,6 +895,23 @@
       }
     };
     return pc;
+  }
+  async function updateCallRoute(pc) {
+    const route = $("callRoute"); if (!route || !pc) return;
+    let relayed = false;
+    try {
+      const stats = await pc.getStats();
+      stats.forEach((rep) => {
+        if (rep.type === "candidate-pair" && (rep.selected || rep.nominated) && rep.state === "succeeded") {
+          const local = stats.get(rep.localCandidateId);
+          const remote = stats.get(rep.remoteCandidateId);
+          if ((local && local.candidateType === "relay") || (remote && remote.candidateType === "relay")) relayed = true;
+        }
+      });
+    } catch {}
+    route.classList.remove("hidden");
+    if (relayed) { route.textContent = "Relay · TURN"; route.classList.add("relay"); route.classList.remove("direct"); }
+    else { route.textContent = "Direct · P2P"; route.classList.add("direct"); route.classList.remove("relay"); }
   }
   function applyCallDevices() {
     if (remoteVideo && devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {});
@@ -951,6 +969,7 @@
     localStream = stream;
     localVideo.srcObject = localStream; inCall = true;
     callOverlay.classList.remove("hidden");
+    $("callRoute").classList.add("hidden");
     $("callBtn").classList.add("hidden"); $("hangupBtn").classList.remove("hidden");
     callAvatar.innerHTML = ""; if (activePeer) callAvatar.appendChild(avatarEl(activePeer.displayName, activePeer.pic)); callAvatar.classList.remove("hidden");
     if (devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {});
@@ -979,6 +998,7 @@
     remoteVideo.srcObject = null; localVideo.srcObject = null; localVideo.classList.remove("hidden-cam");
     inCall = false; pendingOffer = null; pendingCandidates = [];
     callOverlay.classList.add("hidden"); callAvatar.classList.add("hidden");
+    $("callRoute").classList.add("hidden");
     $("callPill").classList.add("hidden");
     $("callBtn").classList.remove("hidden"); $("hangupBtn").classList.add("hidden");
     socket.emit("call:end");
