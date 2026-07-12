@@ -1175,6 +1175,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .msg .read-tick { width: 15px; height: 15px; opacity: .55; }
 .msg .read-tick.read { opacity: 1; color: var(--accent); }
 .msg .read-tick.read .icon { stroke: var(--accent); }
+.typing-bubble { display: flex; align-items: center; gap: 8px; padding: 2px 18px 4px; min-height: 22px; font-size: 13px; color: var(--muted); }
+.typing-bubble.hidden { display: none; }
+.typing-text { color: var(--text); font-weight: 600; }
 .typing-dots { display: inline-flex; gap: 3px; align-items: center; }
 .typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); display: inline-block; animation: td 1.2s infinite ease-in-out; }
 .typing-dots i:nth-child(2) { animation-delay: .2s; }

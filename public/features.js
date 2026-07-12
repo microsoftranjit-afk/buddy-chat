@@ -85,6 +85,28 @@
   socket.on("history", () => setTimeout(() => { const r = B.currentRoom(); if (r && drafts[r] != null && msgInput.value === "") msgInput.value = drafts[r]; }, 60));
   socket.on("message", (m) => { if (m.user === B.myUser() && B.currentRoom()) delete drafts[B.currentRoom()]; });
 
+  // ============================================================ TYPING INDICATOR (emit)
+  let typingSent = false, typingStopTimer = null;
+  function sendTyping(on) {
+    if (on === typingSent) return;
+    typingSent = on;
+    socket.emit("typing", { on });
+  }
+  msgInput.addEventListener("input", () => {
+    if (msgInput.disabled) return;
+    if (msgInput.value.trim().length > 0) {
+      sendTyping(true);
+      clearTimeout(typingStopTimer);
+      typingStopTimer = setTimeout(() => sendTyping(false), 2500);
+    } else {
+      sendTyping(false);
+    }
+  });
+  function stopTyping() { clearTimeout(typingStopTimer); sendTyping(false); }
+  msgInput.addEventListener("blur", stopTyping);
+  msgInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !msgInput.disabled) stopTyping(); }, true);
+  const sendBtnEl = $("sendBtn"); if (sendBtnEl) sendBtnEl.addEventListener("click", stopTyping);
+
   // Slash commands (capture phase so we beat the client's Enter handler)
   msgInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && settings_enter() && !msgInput.disabled) {

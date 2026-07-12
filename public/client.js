@@ -413,9 +413,12 @@
     const inDm = view === "dm" && activePeer && user === activePeer.username;
     const inChan = view === "server" && activeChannel && activeServer && (() => { const s = state.servers.find((x) => x.id === activeServer); return s && (s.members || []).includes(user); })();
     if (!inDm && !inChan) return;
-    if (on) { typingName = from; clearTimeout(typingTimer); typingTimer = setTimeout(() => { typingName = null; updateHeader(); }, 4000); updateHeader(); }
-    else if (typingName === from) { typingName = null; updateHeader(); }
+    if (on) { typingName = from; clearTimeout(typingTimer); typingTimer = setTimeout(() => { typingName = null; updateHeader(); hideTyping(); }, 4000); updateHeader(); showTyping(from); }
+    else if (typingName === from) { typingName = null; updateHeader(); hideTyping(); }
   });
+  const typingBubble = $("typingBubble"), typingText = $("typingText");
+  function showTyping(name) { if (!typingBubble) return; typingText.textContent = name + " is typing…"; typingBubble.classList.remove("hidden"); }
+  function hideTyping() { if (typingBubble) typingBubble.classList.add("hidden"); }
 
   // ====================================================================
   //  RAIL (servers)
@@ -441,7 +444,7 @@
     selectServer(res.server.id);
   });
   function selectHome() {
-    view = "dm"; activePeer = null; activeServer = null; activeChannel = null;
+    view = "dm"; activePeer = null; activeServer = null; activeChannel = null; hideTyping(); typingName = null;
     $("homeBtn").classList.add("active");
     $("dmView").classList.remove("hidden");
     $("serverView").classList.add("hidden");
@@ -461,6 +464,7 @@
   }
   function openChannel(channelId) {
     activeChannel = channelId; activePeer = null;
+    hideTyping(); typingName = null;
     socket.emit("channel-open", { channelId });
     messagesEl.innerHTML = ""; lastDay = "";
     updateHeader(); updateComposer();
@@ -858,6 +862,7 @@
     }
     msgInput.value = "";
     clearReply();
+    hideTyping(); typingName = null;
   }
   $("sendBtn").addEventListener("click", send);
   msgInput.addEventListener("keydown", (e) => {
