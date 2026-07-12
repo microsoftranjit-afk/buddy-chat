@@ -79,6 +79,24 @@ html, body {
   filter: blur(40px); opacity: .95; animation: drift 16s ease-in-out infinite alternate;
 }
 @keyframes drift { from { transform: translate(0,0) scale(1); } to { transform: translate(3%, -3%) scale(1.08); } }
+.auth-dots {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--accent) 55%, transparent) 1.4px, transparent 1.6px);
+  background-size: 26px 26px;
+  opacity: .22; mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 78%);
+  animation: dotdrift 24s linear infinite;
+}
+@keyframes dotdrift { from { background-position: 0 0; } to { background-position: 26px 26px; } }
+/* Subtle animated dotted texture on app panels */
+.rail, .sidebar, .chat { position: relative; }
+.rail::before, .sidebar::before, .chat::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--accent) 60%, transparent) 1.2px, transparent 1.5px);
+  background-size: 28px 28px; opacity: .05; animation: dotdrift 24s linear infinite;
+}
+.rail > *, .sidebar > *, .chat > * { position: relative; z-index: 1; }
+.rail::before { opacity: .07; }
 .auth-card {
   position: relative; width: 420px; max-width: 100%;
   background: #2b2d31; border: 1px solid #26272b;
@@ -143,14 +161,14 @@ html, body {
 .sidebar { background: var(--bg-2); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .side-head { height: 50px; display: flex; align-items: center; gap: 8px; padding: 0 16px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); box-shadow: 0 1px 0 rgba(0,0,0,.2); flex: 0 0 auto; }
 .side-head .head-icon { width: 18px; height: 18px; color: var(--muted); }
-.add-friend { display: flex; align-items: center; gap: 8px; margin: 10px 12px; padding: 0 10px; background: var(--bg-3); border-radius: 4px; transition: border-color .15s, box-shadow .15s; }
-.add-friend:focus-within { box-shadow: 0 0 0 2px var(--ring); }
+.add-friend { display: flex; align-items: center; gap: 8px; margin: 10px 12px; padding: 4px 6px 4px 12px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 10px; transition: border-color .18s, box-shadow .18s, background .18s; }
+.add-friend:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); background: color-mix(in srgb, var(--bg-3) 70%, var(--accent) 6%); }
 .field-icon { width: 18px; height: 18px; color: var(--muted); flex: 0 0 auto; cursor: pointer; }
 .add-friend input { flex: 1; padding: 10px 0; border: none; background: transparent; color: var(--text); font-size: 14px; outline: none; min-width: 0; }
-.add-friend-btn { flex: 0 0 auto; width: 34px; height: 34px; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: filter .15s, transform .1s; }
-.add-friend-btn:hover { filter: brightness(1.12); }
+.add-friend-btn { flex: 0 0 auto; width: 36px; height: 36px; border: none; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px var(--ring); transition: filter .15s, transform .12s, box-shadow .15s; }
+.add-friend-btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 6px 18px var(--ring); }
 .add-friend-btn:active { transform: scale(.9); }
-.add-friend-btn .icon { width: 18px; height: 18px; fill: #fff; stroke: none; }
+.add-friend-btn .icon { width: 19px; height: 19px; fill: #fff; stroke: none; }
 
 .side-scroll { flex: 1; overflow-y: auto; padding: 8px; min-height: 0; }
 .friends { display: flex; flex-direction: column; gap: 2px; }
@@ -447,6 +465,17 @@ html, body {
 @keyframes slideDown { from { opacity: 0; transform: translateY(-14px); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--online) 55%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes callin { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+@keyframes softpop { from { opacity: 0; transform: scale(.8); } to { opacity: 1; transform: scale(1); } }
+.call-overlay { animation: callin .26s cubic-bezier(.2,.9,.3,1.1); }
+.call-avatar { animation: softpop .3s cubic-bezier(.2,.9,.3,1.2); }
+.call-controls .round { animation: softpop .28s backwards; }
+.call-controls .round:nth-child(1) { animation-delay: .04s; }
+.call-controls .round:nth-child(2) { animation-delay: .08s; }
+.call-controls .round:nth-child(3) { animation-delay: .12s; }
+.call-controls .round:nth-child(4) { animation-delay: .16s; }
+.call-controls .round:nth-child(5) { animation-delay: .2s; }
+#localVideo { animation: softpop .3s cubic-bezier(.2,.9,.3,1.2); }
 
 .btn, .primary-btn, .reset-btn, .req-btn, .icon-btn, .round, .rail-item, .friend, .channel, .member, .avatar-btn { transition: filter .15s ease, background .15s ease, transform .1s ease, box-shadow .15s ease, color .15s ease, border-color .15s ease; }
 .primary-btn:hover, .reset-btn:hover, .req-btn:hover, .round:hover, .rail-item:hover, .icon-btn:hover { filter: brightness(1.08); }

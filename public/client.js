@@ -861,6 +861,7 @@
   let localStream = null, peer = null, inCall = false, pendingOffer = null, ringFrom = null, pendingCandidates = [];
   let screenStream = null;
 
+  let callFailTimer = null;
   function makePeer() {
     const pc = new RTCPeerConnection(ICE);
     pc.onicecandidate = (e) => { if (e.candidate) socket.emit("call:ice", e.candidate); };
@@ -870,6 +871,19 @@
       callAvatar.classList.toggle("hidden", !!hasVideo);
       if (devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {});
       remoteVideo.play().catch(() => {});
+    };
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === "connected" || s === "completed") {
+        if (callFailTimer) { clearTimeout(callFailTimer); callFailTimer = null; }
+        callStatus.textContent = "Connected";
+      } else if (s === "failed") {
+        if (callFailTimer) { clearTimeout(callFailTimer); callFailTimer = null; }
+        callStatus.textContent = "Call failed";
+        flash("Call couldn't connect. If you're on different networks, a TURN relay may be required.", "err");
+      } else if (s === "disconnected") {
+        callStatus.textContent = "Reconnecting…";
+      }
     };
     return pc;
   }
@@ -882,7 +896,7 @@
     const hadVideo = localStream.getVideoTracks().length > 0;
     const videoEnabled = hadVideo ? localStream.getVideoTracks()[0].enabled : true;
     const audioEnabled = localStream.getAudioTracks()[0] ? localStream.getAudioTracks()[0].enabled : true;
-    const constraints = { audio: devices.mic ? { deviceId: { exact: devices.mic } } : true };
+    const constraints = { audio: devices.mic ? { deviceId: { ideal: devices.mic } } : true };
     if (hadVideo) constraints.video = true;
     let newStream;
     try { newStream = await navigator.mediaDevices.getUserMedia(constraints); }
@@ -922,17 +936,23 @@
     const ts = $("toggleScreen"); if (ts) ts.classList.remove("hangup");
   }
   async function startCall(asInitiator) {
-    const audio = devices.mic ? { deviceId: { exact: devices.mic } } : true;
-    try { localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio }); }
-    catch { try { localStream = await navigator.mediaDevices.getUserMedia({ audio: devices.mic ? { deviceId: { exact: devices.mic } } : true }); } catch (e2) { alert("Camera or microphone blocked. (" + e2.message + ")"); return; } }
+    const audio = devices.mic ? { deviceId: { ideal: devices.mic } } : true;
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio }); }
+    catch { try { stream = await navigator.mediaDevices.getUserMedia({ audio: devices.mic ? { deviceId: { ideal: devices.mic } } : true }); } catch (e2) { flash("Camera or microphone blocked. (" + (e2 && e2.message) + ")", "err"); return; } }
+    localStream = stream;
     localVideo.srcObject = localStream; inCall = true;
     callOverlay.classList.remove("hidden");
     $("callBtn").classList.add("hidden"); $("hangupBtn").classList.remove("hidden");
     callAvatar.innerHTML = ""; if (activePeer) callAvatar.appendChild(avatarEl(activePeer.displayName, activePeer.pic)); callAvatar.classList.remove("hidden");
+    if (devices.speaker && remoteVideo.setSinkId) remoteVideo.setSinkId(devices.speaker).catch(() => {});
+    try { refreshDevices(); } catch {}
     peer = makePeer();
     localStream.getTracks().forEach((t) => peer.addTrack(t, localStream));
+    if (callFailTimer) { clearTimeout(callFailTimer); callFailTimer = null; }
     if (asInitiator) {
       callStatus.textContent = "Ringing…";
+      callFailTimer = setTimeout(() => { if (peer && peer.connectionState !== "connected" && peer.connectionState !== "completed") flash("Still connecting… if this hangs, a TURN relay may be needed for your network.", "info"); }, 12000);
       try { const offer = await peer.createOffer(); await peer.setLocalDescription(offer); socket.emit("call:offer", offer); } catch (e) { console.error(e); }
     } else if (pendingOffer) { await handleOffer(pendingOffer); pendingOffer = null; }
   }
