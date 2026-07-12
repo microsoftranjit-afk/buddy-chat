@@ -928,3 +928,101 @@ html, body { font-family: "gg sans", "Inter", "Segoe UI Variable", "Segoe UI", s
   .composer, .reply-bar { margin-left: 10px; margin-right: 10px; }
   .msg-actions { opacity: 1; pointer-events: auto; transform: none; }
 }
+
+/* ==================================================================== */
+/*  UI/UX OVERHAUL v3  —  customization engine + polish                  */
+/* ==================================================================== */
+:root { --panel-radius: 16px; }
+
+/* Custom font family drives the whole app (inputs inherit) */
+html, body { font-family: var(--app-font, "gg sans","Inter","Segoe UI Variable","Segoe UI",system-ui,-apple-system,sans-serif); }
+
+/* Panel radius flows to the main surfaces */
+.auth-card, .modal-card, .profile-card, .composer, .emoji-panel, .ctx-menu { border-radius: var(--panel-radius); }
+.composer { border-radius: var(--panel-radius); }
+
+/* ---------- THEME GALLERY ---------- */
+.theme-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.theme-card { border: 2px solid var(--border); border-radius: 12px; overflow: hidden; cursor: pointer; background: var(--bg-3); padding: 0; text-align: left; transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease; }
+.theme-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.theme-card.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
+.theme-prev { display: flex; height: 46px; position: relative; overflow: hidden; }
+.theme-prev .tp-rail { width: 20%; }
+.theme-prev .tp-side { width: 30%; }
+.theme-prev .tp-main { position: relative; flex: 1; }
+.theme-prev .tp-bubble { position: absolute; left: 8px; top: 11px; width: 55%; height: 8px; border-radius: 6px; }
+.theme-prev .tp-bubble.b2 { top: 26px; width: 42%; }
+.theme-name { display: block; font-size: 11px; font-weight: 700; padding: 6px 8px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- SEGMENTED (wrap variant) + labels ---------- */
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap button { flex: 1 0 28%; }
+.set-label { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 7px; }
+.seg button { transition: background .14s ease, color .14s ease; }
+.seg button:not(.active):hover { color: var(--text); }
+
+/* ---------- CUSTOM CSS BOX ---------- */
+#customCss { width: 100%; background: var(--bg-3); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 10px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; line-height: 1.5; resize: vertical; outline: none; }
+#customCss:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
+
+/* ---------- DENSITY ---------- */
+[data-density="comfortable"] .messages { gap: 6px; padding: 26px 26px 12px; }
+[data-density="comfortable"] .msg { margin-top: 16px; }
+[data-density="comfortable"] .friend, [data-density="comfortable"] .member { padding-top: 11px; padding-bottom: 11px; }
+[data-density="comfortable"] .channel { padding-top: 9px; padding-bottom: 9px; }
+[data-density="compact"] .messages { gap: 0; padding: 12px 16px 8px; }
+[data-density="compact"] .msg { margin-top: 4px; }
+[data-density="compact"] .msg .bubble { padding: 6px 11px; }
+[data-density="compact"] .friend, [data-density="compact"] .member, [data-density="compact"] .channel { padding-top: 5px; padding-bottom: 5px; }
+
+/* ---------- CLASSIC (flat) MESSAGE LAYOUT ---------- */
+[data-layout="flat"] .msg { max-width: 100%; align-self: stretch; align-items: flex-start; gap: 14px; margin-top: 12px; padding: 2px 8px; border-radius: 8px; }
+[data-layout="flat"] .msg:hover { background: color-mix(in srgb, var(--muted) 8%, transparent); }
+[data-layout="flat"] .msg.mine { flex-direction: row; align-self: stretch; }
+[data-layout="flat"] .msg.mine .bubble-wrap { align-items: flex-start; }
+[data-layout="flat"] .msg .avatar { display: flex; }
+[data-layout="flat"] .msg .author { display: block; color: var(--accent); }
+[data-layout="flat"] .msg.mine .author { display: block; }
+[data-layout="flat"] .msg .bubble { background: transparent !important; border: none !important; box-shadow: none !important; color: var(--text) !important; padding: 1px 0 !important; border-radius: 0 !important; }
+[data-layout="flat"] .msg.mine .bubble { background: transparent !important; color: var(--text) !important; }
+[data-layout="flat"] .msg .bubble.media { padding: 4px 0 !important; }
+[data-layout="flat"] .msg .reply-ref { align-self: flex-start !important; }
+[data-layout="flat"] .msg.grouped .avatar { visibility: hidden; display: flex; }
+[data-layout="flat"] .msg.grouped .author { display: none; }
+
+/* ---------- REDUCED MOTION ---------- */
+[data-anim="off"] *, [data-anim="off"] *::before, [data-anim="off"] *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+[data-anim="off"] .rail::before, [data-anim="off"] .sidebar::before, [data-anim="off"] .chat::before, [data-anim="off"] .auth-bg, [data-anim="off"] .auth-dots { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .auth-bg, .auth-dots { animation: none !important; } }
+
+/* ---------- GLASS PANELS ---------- */
+[data-glass="off"] .chat-head, [data-glass="off"] .side-head, [data-glass="off"] .day-sep, [data-glass="off"] .toast { backdrop-filter: none !important; }
+[data-glass="on"] .settings, [data-glass="on"] .emoji-panel, [data-glass="on"] .ctx-menu, [data-glass="on"] .side-panel { backdrop-filter: blur(14px) saturate(1.2); }
+
+/* ---------- POLISH: micro-interactions & depth ---------- */
+.theme-gallery .theme-card:active { transform: scale(.97); }
+.dot { box-shadow: var(--shadow-sm); }
+.dot.active { box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--accent); }
+.bg-swatch { transition: transform .12s ease, border-color .12s ease; }
+.bg-swatch:hover { transform: translateY(-2px); }
+.primary-btn, .dl-btn, .add-friend-btn, .btn.call, .btn.hangup { position: relative; overflow: hidden; }
+.set-section { transition: opacity .2s ease; }
+.avatar { box-shadow: var(--shadow-sm); }
+
+/* Softer, richer auth background gradient using accent */
+.auth-card { box-shadow: 0 24px 70px rgba(0,0,0,.5), 0 0 0 1px var(--border-soft); }
+.brand h1 { background: linear-gradient(120deg, var(--text), color-mix(in srgb, var(--accent) 70%, var(--text))); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+
+/* Nicer range sliders */
+input[type="range"] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 6px; background: var(--bg-3); accent-color: var(--accent); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--accent); box-shadow: var(--glow); cursor: pointer; border: 3px solid var(--bg-2); }
+input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg-2); cursor: pointer; }
+
+/* Settings drawer: a touch wider + smoother scroll for the extra controls */
+.settings { width: 360px; max-width: 92vw; }
+.settings-body { scroll-behavior: smooth; }
+
+@media (max-width: 720px) {
+  .settings { width: 100vw; }
+  .theme-gallery { grid-template-columns: repeat(2, 1fr); }
+}

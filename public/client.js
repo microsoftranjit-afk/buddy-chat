@@ -76,32 +76,132 @@
   const messagesEl = $("messages"), msgInput = $("msgInput"), connState = $("connState");
 
   // ====================================================================
-  //  APPEARANCE
+  //  APPEARANCE  —  fully customizable theming engine
   // ====================================================================
-  const ACCENTS = ["#5865f2", "#e15e54", "#ee8a4a", "#bfa54e", "#5fb05f", "#4aa3a8", "#5a8fd6", "#8e6cc0", "#d463a4", "#6d8a96"];
+  const ACCENTS = ["#5865f2", "#7c5cff", "#e15e54", "#ee8a4a", "#f2c94c", "#5fb05f", "#2dc46e", "#4aa3a8", "#38bdf8", "#5a8fd6", "#8e6cc0", "#d463a4", "#ff6b9d", "#6d8a96"];
+
+  // Full palette themes — applied as inline CSS variables so they override everything.
+  const THEME_VARS = ["--rail","--bg","--bg-2","--bg-3","--hover","--active","--text","--text-2","--muted","--bubble-in","--border","--border-soft","--header"];
+  const THEMES = [
+    { key: "midnight", name: "Midnight", base: "dark", accent: "#5865f2", vars: { "--rail":"#16171a","--bg":"#1a1b1e","--bg-2":"#202226","--bg-3":"#26282d","--hover":"#2b2d33","--active":"#34363d","--text":"#f4f5f7","--text-2":"#c7cbd1","--muted":"#8b909a","--bubble-in":"#2a2c31","--border":"#303237","--border-soft":"#2a2c31","--header":"#1a1b1e" } },
+    { key: "obsidian", name: "Obsidian", base: "dark", accent: "#7c5cff", vars: { "--rail":"#000000","--bg":"#050506","--bg-2":"#0b0c0e","--bg-3":"#141518","--hover":"#1b1c20","--active":"#232428","--text":"#f5f6f8","--text-2":"#c2c6cd","--muted":"#7e838d","--bubble-in":"#141518","--border":"#202126","--border-soft":"#17181b","--header":"#050506" } },
+    { key: "dark", name: "Discord", base: "dark", accent: "#5865f2", vars: { "--rail":"#1e1f22","--bg":"#313338","--bg-2":"#2b2d31","--bg-3":"#1e1f22","--hover":"#35373c","--active":"#404249","--text":"#f2f3f5","--text-2":"#dbdee1","--muted":"#949ba4","--bubble-in":"#2b2d31","--border":"#232428","--border-soft":"#2b2d31","--header":"#313338" } },
+    { key: "nord", name: "Nord", base: "dark", accent: "#88c0d0", vars: { "--rail":"#2e3440","--bg":"#3b4252","--bg-2":"#343b48","--bg-3":"#2e3440","--hover":"#434c5e","--active":"#4c566a","--text":"#eceff4","--text-2":"#d8dee9","--muted":"#9aa4b8","--bubble-in":"#434c5e","--border":"#2b303b","--border-soft":"#3b4252","--header":"#3b4252" } },
+    { key: "dracula", name: "Dracula", base: "dark", accent: "#bd93f9", vars: { "--rail":"#21222c","--bg":"#282a36","--bg-2":"#22232e","--bg-3":"#191a21","--hover":"#343746","--active":"#44475a","--text":"#f8f8f2","--text-2":"#d5d6e0","--muted":"#9ea0b0","--bubble-in":"#343746","--border":"#191a21","--border-soft":"#282a36","--header":"#282a36" } },
+    { key: "mocha", name: "Mocha", base: "dark", accent: "#cba6f7", vars: { "--rail":"#181825","--bg":"#1e1e2e","--bg-2":"#181825","--bg-3":"#11111b","--hover":"#313244","--active":"#45475a","--text":"#cdd6f4","--text-2":"#bac2de","--muted":"#7f849c","--bubble-in":"#313244","--border":"#11111b","--border-soft":"#1e1e2e","--header":"#1e1e2e" } },
+    { key: "tokyo", name: "Tokyo Night", base: "dark", accent: "#7aa2f7", vars: { "--rail":"#16161e","--bg":"#1a1b26","--bg-2":"#16161e","--bg-3":"#101014","--hover":"#24283b","--active":"#2f334d","--text":"#c0caf5","--text-2":"#a9b1d6","--muted":"#565f89","--bubble-in":"#24283b","--border":"#101014","--border-soft":"#1a1b26","--header":"#1a1b26" } },
+    { key: "ocean", name: "Ocean", base: "dark", accent: "#38bdf8", vars: { "--rail":"#0b1a24","--bg":"#0f2230","--bg-2":"#0c1c28","--bg-3":"#08151d","--hover":"#143140","--active":"#1b414f","--text":"#e6f3fa","--text-2":"#bcd7e3","--muted":"#7d9aa8","--bubble-in":"#143140","--border":"#08151d","--border-soft":"#0f2230","--header":"#0f2230" } },
+    { key: "forest", name: "Forest", base: "dark", accent: "#4ade80", vars: { "--rail":"#12211a","--bg":"#16281f","--bg-2":"#12211a","--bg-3":"#0d1a13","--hover":"#1e3729","--active":"#274736","--text":"#e6f4ea","--text-2":"#c0d8c8","--muted":"#7fa08b","--bubble-in":"#1e3729","--border":"#0d1a13","--border-soft":"#16281f","--header":"#16281f" } },
+    { key: "rose", name: "Rosé Pine", base: "dark", accent: "#ebbcba", vars: { "--rail":"#191724","--bg":"#1f1d2e","--bg-2":"#191724","--bg-3":"#14121f","--hover":"#26233a","--active":"#312e48","--text":"#e0def4","--text-2":"#c8c4de","--muted":"#908caa","--bubble-in":"#26233a","--border":"#14121f","--border-soft":"#1f1d2e","--header":"#1f1d2e" } },
+    { key: "light", name: "Light", base: "light", accent: "#5865f2", vars: { "--rail":"#e7e9ee","--bg":"#ffffff","--bg-2":"#f5f6f9","--bg-3":"#eceef3","--hover":"#e4e6ec","--active":"#d6d9e2","--text":"#14151a","--text-2":"#444750","--muted":"#737782","--bubble-in":"#f1f3f7","--border":"#e0e2ea","--border-soft":"#eaecf1","--header":"#ffffff" } },
+    { key: "latte", name: "Latte", base: "light", accent: "#8839ef", vars: { "--rail":"#dce0e8","--bg":"#eff1f5","--bg-2":"#e6e9ef","--bg-3":"#dce0e8","--hover":"#d6dae4","--active":"#ccd0da","--text":"#4c4f69","--text-2":"#5c5f77","--muted":"#8c8fa1","--bubble-in":"#e6e9ef","--border":"#ccd0da","--border-soft":"#dce0e8","--header":"#eff1f5" } },
+    { key: "cotton", name: "Cotton", base: "light", accent: "#e26d5c", vars: { "--rail":"#efe9e1","--bg":"#fbf7f2","--bg-2":"#f3ece3","--bg-3":"#ece3d7","--hover":"#e6dccd","--active":"#dccfbb","--text":"#2a2620","--text-2":"#5b5347","--muted":"#8c8271","--bubble-in":"#f1e9dd","--border":"#e3d8c8","--border-soft":"#ece3d7","--header":"#fbf7f2" } },
+  ];
+  const FONTS = {
+    system: `"gg sans","Inter","Segoe UI Variable","Segoe UI",system-ui,-apple-system,sans-serif`,
+    inter:  `"Inter","Segoe UI",system-ui,sans-serif`,
+    rounded:`"Nunito","Quicksand","Segoe UI Rounded",ui-rounded,"Segoe UI",system-ui,sans-serif`,
+    serif:  `Georgia,"Iowan Old Style","Times New Roman",serif`,
+    mono:   `ui-monospace,"Cascadia Code","JetBrains Mono",Consolas,monospace`,
+  };
   const BG_PRESETS = [
     { name: "Classic", value: "var(--bg)" },
     { name: "Dots", value: "radial-gradient(circle at 1px 1px, rgba(130,130,128,.16) 1px, transparent 0) 0 0/20px 20px, var(--bg)" },
     { name: "Grid", value: "linear-gradient(rgba(130,130,128,.10) 1px,transparent 1px) 0 0/24px 24px, linear-gradient(90deg,rgba(130,130,128,.10) 1px,transparent 1px) 0 0/24px 24px, var(--bg)" },
     { name: "Tint", value: "radial-gradient(circle at 25% 15%, color-mix(in srgb, var(--accent) 16%, var(--bg)), var(--bg) 72%)" },
-    { name: "Aurora", value: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--bg)), var(--bg) 60%)" },
+    { name: "Aurora", value: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--bg)), var(--bg) 55%), radial-gradient(60% 60% at 85% 15%, color-mix(in srgb, var(--accent) 12%, transparent), transparent)" },
     { name: "Smoke", value: "radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg) 65%)" },
+    { name: "Glow", value: "radial-gradient(70% 55% at 50% 120%, color-mix(in srgb, var(--accent) 22%, var(--bg)), var(--bg) 70%)" },
+    { name: "Mesh", value: "radial-gradient(40% 40% at 15% 20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), radial-gradient(45% 45% at 85% 80%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--bg)" },
+    { name: "Diagonal", value: "repeating-linear-gradient(45deg, color-mix(in srgb, var(--muted) 6%, var(--bg)) 0 2px, var(--bg) 2px 16px)" },
   ];
-  const DEFAULTS = { theme: "dark", accent: "#5865f2", bg: "Classic", radius: 14, fontSize: 15, enter: true, compact: false, timestamps: false, sound: false };
+  const DEFAULTS = {
+    theme: "midnight", accent: "#5865f2", accent2: "", gradient: true,
+    bg: "Classic", bgImage: "", radius: 16, fontSize: 15, font: "system",
+    density: "cozy", layout: "bubbles", animations: true, glass: true,
+    enter: true, compact: false, timestamps: false, sound: false, customCss: "",
+  };
   const STORE_KEY = "buddy-settings";
-  function loadState() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch { return Object.assign({}, DEFAULTS); } }
+  function loadState() {
+    let s;
+    try { s = Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); } catch { s = Object.assign({}, DEFAULTS); }
+    if (!THEMES.some((t) => t.key === s.theme)) s.theme = s.theme === "light" ? "light" : "midnight";
+    return s;
+  }
   const settings = loadState();
   function saveSettings() { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); }
+
+  function applyCustomCss(css) {
+    let el = document.getElementById("customCssStyle");
+    if (!el) { el = document.createElement("style"); el.id = "customCssStyle"; document.head.appendChild(el); }
+    el.textContent = css || "";
+  }
   function applySettings(s) {
     const root = document.documentElement;
-    root.setAttribute("data-theme", s.theme);
+    const theme = THEMES.find((t) => t.key === s.theme) || THEMES[0];
+    root.setAttribute("data-theme", theme.base);
+    THEME_VARS.forEach((v) => root.style.removeProperty(v));
+    Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
     root.style.setProperty("--accent", s.accent);
+    const a2 = s.accent2 || `color-mix(in srgb, ${s.accent} 72%, #000)`;
+    root.style.setProperty("--accent-2", s.gradient ? a2 : s.accent);
     root.style.setProperty("--bubble-radius", s.radius + "px");
+    root.style.setProperty("--panel-radius", Math.round(s.radius * 0.9 + 4) + "px");
     root.style.setProperty("--font-size", s.fontSize + "px");
+    root.style.setProperty("--app-font", FONTS[s.font] || FONTS.system);
     const bg = BG_PRESETS.find((b) => b.name === s.bg) || BG_PRESETS[0];
-    root.style.setProperty("--chat-bg", bg.value);
+    root.style.setProperty("--chat-bg", s.bgImage ? `linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent), color-mix(in srgb, var(--bg) 55%, transparent)), url("${s.bgImage}") center/cover` : bg.value);
+    root.setAttribute("data-density", s.density);
+    root.setAttribute("data-layout", s.layout);
+    root.setAttribute("data-anim", s.animations ? "on" : "off");
+    root.setAttribute("data-glass", s.glass ? "on" : "off");
+    applyCustomCss(s.customCss);
   }
+
+  function segBind(id, key, cb) {
+    const seg = $(id); if (!seg) return;
+    [...seg.children].forEach((btn) => {
+      const val = btn.dataset[Object.keys(btn.dataset)[0]];
+      btn.classList.toggle("active", val === String(settings[key]));
+      btn.onclick = () => {
+        settings[key] = val;
+        [...seg.children].forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        applySettings(settings); saveSettings();
+        if (cb) cb();
+      };
+    });
+  }
+
   function renderAppearance() {
+    // Theme gallery
+    const gal = $("themeGallery");
+    if (gal) {
+      gal.innerHTML = "";
+      THEMES.forEach((t) => {
+        const v = t.vars;
+        const b = document.createElement("button");
+        b.className = "theme-card" + (t.key === settings.theme ? " active" : "");
+        b.title = t.name;
+        b.innerHTML =
+          `<span class="theme-prev" style="background:${v["--bg"]}">` +
+            `<span class="tp-rail" style="background:${v["--rail"]}"></span>` +
+            `<span class="tp-side" style="background:${v["--bg-2"]}"></span>` +
+            `<span class="tp-main">` +
+              `<span class="tp-bubble" style="background:${v["--bubble-in"]}"></span>` +
+              `<span class="tp-bubble b2" style="background:${t.accent}"></span>` +
+            `</span>` +
+          `</span><span class="theme-name">${t.name}</span>`;
+        b.onclick = () => {
+          settings.theme = t.key;
+          [...gal.children].forEach((c) => c.classList.remove("active"));
+          b.classList.add("active");
+          applySettings(settings); saveSettings();
+        };
+        gal.appendChild(b);
+      });
+    }
+    // Accent dots
     const dots = $("accentDots"); dots.innerHTML = "";
     ACCENTS.forEach((c) => {
       const b = document.createElement("button");
@@ -110,6 +210,7 @@
       b.addEventListener("click", () => { settings.accent = c; $("accentCustom").value = c; [...dots.children].forEach((d) => d.classList.remove("active")); b.classList.add("active"); applySettings(settings); saveSettings(); });
       dots.appendChild(b);
     });
+    // Background swatches
     const grid = $("bgGrid"); grid.innerHTML = "";
     BG_PRESETS.forEach((p) => {
       const b = document.createElement("button");
@@ -118,15 +219,34 @@
       b.addEventListener("click", () => { settings.bg = p.name; [...grid.children].forEach((g) => g.classList.remove("active")); b.classList.add("active"); applySettings(settings); saveSettings(); });
       grid.appendChild(b);
     });
-    [...$("themeSeg").children].forEach((btn) => { btn.classList.toggle("active", btn.dataset.theme === settings.theme); btn.onclick = () => { settings.theme = btn.dataset.theme; [...$("themeSeg").children].forEach((b) => b.classList.remove("active")); btn.classList.add("active"); applySettings(settings); saveSettings(); }; });
+    // Accent custom + gradient
     $("accentCustom").value = settings.accent;
     $("accentCustom").oninput = (e) => { settings.accent = e.target.value; [...dots.children].forEach((d) => d.classList.remove("active")); applySettings(settings); saveSettings(); };
+    if ($("accent2Custom")) { $("accent2Custom").value = settings.accent2 || "#4752c4"; $("accent2Custom").oninput = (e) => { settings.accent2 = e.target.value; applySettings(settings); saveSettings(); }; }
+    // Segmented controls
+    segBind("fontSeg", "font");
+    segBind("layoutSeg", "layout");
+    segBind("densitySeg", "density");
+    // Sliders
     $("radiusRange").value = settings.radius; $("radiusVal").textContent = settings.radius + "px";
     $("radiusRange").oninput = (e) => { settings.radius = +e.target.value; $("radiusVal").textContent = settings.radius + "px"; applySettings(settings); saveSettings(); };
     $("fontRange").value = settings.fontSize; $("fontVal").textContent = settings.fontSize + "px";
     $("fontRange").oninput = (e) => { settings.fontSize = +e.target.value; $("fontVal").textContent = settings.fontSize + "px"; applySettings(settings); saveSettings(); };
-    const t = (id, key) => { $(id).checked = !!settings[key]; $(id).onchange = (e) => { settings[key] = e.target.checked; saveSettings(); }; };
+    // Background image
+    if ($("bgImageInput")) {
+      $("bgImageInput").value = settings.bgImage || "";
+      $("bgImageInput").onchange = (e) => { settings.bgImage = e.target.value.trim(); applySettings(settings); saveSettings(); };
+      $("bgImageClear").onclick = () => { settings.bgImage = ""; $("bgImageInput").value = ""; applySettings(settings); saveSettings(); };
+    }
+    // Effect + chat toggles
+    const t = (id, key) => { if (!$(id)) return; $(id).checked = !!settings[key]; $(id).onchange = (e) => { settings[key] = e.target.checked; applySettings(settings); saveSettings(); }; };
+    t("toggleGradient", "gradient"); t("toggleAnim", "animations"); t("toggleGlass", "glass");
     t("toggleEnter", "enter"); t("toggleCompact", "compact"); t("toggleTimestamps", "timestamps"); t("toggleSound", "sound");
+    // Advanced custom CSS
+    if ($("customCss")) {
+      $("customCss").value = settings.customCss || "";
+      $("applyCss").onclick = () => { settings.customCss = $("customCss").value; applySettings(settings); saveSettings(); if (typeof flash === "function") flash("Custom CSS applied", "ok"); };
+    }
   }
   $("resetSettings").onclick = () => { Object.assign(settings, DEFAULTS); saveSettings(); renderAppearance(); applySettings(settings); };
   $("settingsOpen").onclick = () => $("settings").classList.remove("hidden");

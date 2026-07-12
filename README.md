@@ -7,6 +7,25 @@ A lightweight, self-hostable real-time chat app with **text messaging** and **vo
 - 🌐 Works across the internet
 - 📦 Zero build step — plain Node.js + HTML/JS
 
+## Make it yours — deep customization
+
+Open **Settings → appearance** to reshape the whole app:
+
+- **13 built-in themes** — Midnight, Obsidian (AMOLED), Discord, Nord, Dracula,
+  Mocha, Tokyo Night, Ocean, Forest, Rosé Pine, Light, Latte, Cotton. Pick from a
+  live theme gallery.
+- **Accent color** — 14 presets, a custom color picker, optional gradient
+  messages with your own gradient end color.
+- **Fonts** — System, Inter, Rounded, Serif or Mono, plus a text-size slider.
+- **Layout & density** — Bubble or Classic (flat) message layout; Roomy / Cozy /
+  Compact spacing; adjustable corner roundness.
+- **Chat backgrounds** — 9 generated patterns (Dots, Grid, Aurora, Mesh, Glow…)
+  or any image URL.
+- **Effects** — toggle animations/motion and glass blur on panels.
+- **Advanced** — a custom-CSS box for power users to restyle anything.
+
+All preferences are saved per device and applied instantly.
+
 ## Quick start (local)
 
 ```bash

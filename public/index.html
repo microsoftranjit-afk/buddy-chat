@@ -305,27 +305,63 @@
 
         <section class="set-section">
           <h3>Theme</h3>
-          <div class="seg" id="themeSeg">
-            <button data-theme="dark" class="active">Dark</button>
-            <button data-theme="light">Light</button>
-          </div>
+          <div class="theme-gallery" id="themeGallery"></div>
         </section>
 
         <section class="set-section">
           <h3>Accent color</h3>
           <div class="dots" id="accentDots"></div>
-          <label class="custom-color">Custom <input type="color" id="accentCustom" value="#5865f2" /></label>
+          <label class="custom-color">Custom accent <input type="color" id="accentCustom" value="#5865f2" /></label>
+          <label class="switch-row" style="margin-top:14px"><span>Gradient messages</span><span class="switch"><input type="checkbox" id="toggleGradient" checked /><span class="slider-sw"></span></span></label>
+          <label class="custom-color" id="accent2Row">Gradient end <input type="color" id="accent2Custom" value="#4752c4" /></label>
+        </section>
+
+        <section class="set-section">
+          <h3>Font</h3>
+          <div class="seg wrap" id="fontSeg">
+            <button data-font="system" class="active">System</button>
+            <button data-font="inter">Inter</button>
+            <button data-font="rounded">Rounded</button>
+            <button data-font="serif">Serif</button>
+            <button data-font="mono">Mono</button>
+          </div>
+          <label class="slider-row" style="margin-top:16px"><span>Text size</span><span id="fontVal" class="slider-val">15px</span><input type="range" id="fontRange" min="12" max="22" value="15" /></label>
+        </section>
+
+        <section class="set-section">
+          <h3>Layout &amp; density</h3>
+          <div class="set-label">Message style</div>
+          <div class="seg" id="layoutSeg">
+            <button data-layout="bubbles" class="active">Bubbles</button>
+            <button data-layout="flat">Classic</button>
+          </div>
+          <div class="set-label" style="margin-top:14px">Density</div>
+          <div class="seg" id="densitySeg">
+            <button data-density="comfortable">Roomy</button>
+            <button data-density="cozy" class="active">Cozy</button>
+            <button data-density="compact">Compact</button>
+          </div>
+          <label class="slider-row" style="margin-top:16px"><span>Corner roundness</span><span id="radiusVal" class="slider-val">16px</span><input type="range" id="radiusRange" min="0" max="26" value="16" /></label>
         </section>
 
         <section class="set-section">
           <h3>Chat background</h3>
           <div class="bg-grid" id="bgGrid"></div>
+          <label class="field-inline" style="margin-top:14px"><span>Image URL</span><input id="bgImageInput" type="text" placeholder="https://…" /></label>
+          <button id="bgImageClear" class="reset-btn" style="margin-top:8px">Clear background image</button>
         </section>
 
         <section class="set-section">
-          <h3>Message style</h3>
-          <label class="slider-row"><span>Bubble roundness</span><span id="radiusVal" class="slider-val">14px</span><input type="range" id="radiusRange" min="0" max="24" value="14" /></label>
-          <label class="slider-row"><span>Text size</span><span id="fontVal" class="slider-val">15px</span><input type="range" id="fontRange" min="12" max="20" value="15" /></label>
+          <h3>Effects</h3>
+          <label class="switch-row"><span>Animations &amp; motion</span><span class="switch"><input type="checkbox" id="toggleAnim" checked /><span class="slider-sw"></span></span></label>
+          <label class="switch-row"><span>Glass blur on panels</span><span class="switch"><input type="checkbox" id="toggleGlass" checked /><span class="slider-sw"></span></span></label>
+        </section>
+
+        <section class="set-section">
+          <h3>Advanced — custom CSS</h3>
+          <p class="set-note">Power users only. Tweak anything with your own CSS.</p>
+          <textarea id="customCss" rows="4" placeholder="/* e.g. .msg .bubble { border-radius: 4px; } */" spellcheck="false"></textarea>
+          <button id="applyCss" class="reset-btn" style="margin-top:8px">Apply CSS</button>
         </section>
 
         <a id="settingsDownload" class="set-dl" href="/download">
