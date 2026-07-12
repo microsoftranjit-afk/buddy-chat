@@ -45,6 +45,7 @@
 * { box-sizing: border-box; }
 html, body {
   margin: 0; height: 100%; width: 100%; max-width: 100vw; overflow: hidden; overflow-x: hidden;
+  position: fixed; inset: 0;
   overscroll-behavior: none; touch-action: pan-y;
   font-family: "gg sans", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   background: var(--rail); color: var(--text);
