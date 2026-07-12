@@ -86,23 +86,32 @@
   socket.on("message", (m) => { if (m.user === B.myUser() && B.currentRoom()) delete drafts[B.currentRoom()]; });
 
   // ============================================================ TYPING INDICATOR (emit)
-  let typingSent = false, typingStopTimer = null;
-  function sendTyping(on) {
-    if (on === typingSent) return;
-    typingSent = on;
-    socket.emit("typing", { on });
+  // Show "(user) is typing" while keys are being pressed, and clear it the moment
+  // you stop (short pause) instead of after a long fixed delay.
+  let typingSent = false, lastTypingEmit = 0, typingStopTimer = null;
+  function emitTyping(on) {
+    const now = Date.now();
+    if (on) {
+      if (typingSent && now - lastTypingEmit < 1500) return; // throttle re-emits
+      typingSent = true; lastTypingEmit = now;
+      socket.emit("typing", { on: true });
+    } else {
+      if (!typingSent) return;
+      typingSent = false;
+      socket.emit("typing", { on: false });
+    }
   }
   msgInput.addEventListener("input", () => {
     if (msgInput.disabled) return;
+    clearTimeout(typingStopTimer);
     if (msgInput.value.trim().length > 0) {
-      sendTyping(true);
-      clearTimeout(typingStopTimer);
-      typingStopTimer = setTimeout(() => sendTyping(false), 2500);
+      emitTyping(true);
+      typingStopTimer = setTimeout(() => emitTyping(false), 700); // stopped typing -> hide
     } else {
-      sendTyping(false);
+      emitTyping(false);
     }
   });
-  function stopTyping() { clearTimeout(typingStopTimer); sendTyping(false); }
+  function stopTyping() { clearTimeout(typingStopTimer); emitTyping(false); }
   msgInput.addEventListener("blur", stopTyping);
   msgInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !msgInput.disabled) stopTyping(); }, true);
   const sendBtnEl = $("sendBtn"); if (sendBtnEl) sendBtnEl.addEventListener("click", stopTyping);
