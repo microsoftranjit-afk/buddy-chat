@@ -116,9 +116,16 @@ screen and in Settings). It hits `GET /download`, which:
 The installer is built and published automatically by GitHub Actions
 (`.github/workflows/release.yml`): on every push to `main` it builds the Windows
 installer on a Windows runner and uploads it to the **`desktop-latest`** release
-as `Buddy-Setup.exe`. `render.yaml` sets `DOWNLOAD_URL` to that stable asset URL,
-so the button works on Render without committing a 75 MB binary. To rebuild
-manually, run the workflow from the Actions tab.
+as `Buddy-Setup.exe`. `render.yaml` sets `DOWNLOAD_URL` to that stable asset URL.
+
+To avoid GitHub throttling large anonymous release downloads (the download
+stalls partway through), set a **`GH_TOKEN`** environment variable on Render
+(dashboard → Environment) to a GitHub token with `public_repo` / read access.
+The server then proxies the file with an authenticated request so it streams at
+full speed. Without `GH_TOKEN` it just redirects (and may be throttled). You can
+also drop the `.exe` into `public/download/` and commit it to serve it directly
+from the app (no GitHub dependency). To rebuild manually, run the workflow from
+the Actions tab.
 
 ## Notes
 - Chat history is kept in memory on the server (last 500 messages per room).

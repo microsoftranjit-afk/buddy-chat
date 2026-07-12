@@ -189,10 +189,36 @@ app.get("/api/config", (req, res) => {
 });
 
 // ---- Desktop app download ----
-// Redirects to DOWNLOAD_URL if set (e.g. a GitHub release), otherwise serves a
-// locally built installer from dist/ or public/download/.
-app.get("/download", (req, res) => {
-  if (process.env.DOWNLOAD_URL) return res.redirect(process.env.DOWNLOAD_URL);
+// If DOWNLOAD_URL is set and GH_TOKEN is present, proxy the file through this
+// server using an authenticated GitHub request so large release-asset downloads
+// aren't throttled (GitHub throttles anonymous ones). Without GH_TOKEN it just
+// redirects. If no DOWNLOAD_URL, serve a locally built installer from dist/ or
+// public/download/.
+app.get("/download", async (req, res) => {
+  if (process.env.DOWNLOAD_URL) {
+    if (process.env.GH_TOKEN) {
+      try {
+        const r = await fetch(process.env.DOWNLOAD_URL, { headers: { Authorization: "Bearer " + process.env.GH_TOKEN } });
+        if (!r.ok) throw new Error("upstream " + r.status);
+        const fn = decodeURIComponent((process.env.DOWNLOAD_URL.split("/").pop() || "Buddy-Setup.exe").split("?")[0]);
+        res.setHeader("Content-Disposition", 'attachment; filename="' + fn + '"');
+        res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
+        const len = r.headers.get("content-length");
+        if (len) res.setHeader("Content-Length", len);
+        const reader = r.body.getReader();
+        const pump = () => reader.read().then(({ done, value }) => {
+          if (done) return res.end();
+          if (res.write(Buffer.from(value))) pump();
+          else res.once("drain", pump);
+        });
+        res.on("close", () => { try { reader.cancel(); } catch (e) {} });
+        return pump();
+      } catch (e) {
+        return res.redirect(process.env.DOWNLOAD_URL);
+      }
+    }
+    return res.redirect(process.env.DOWNLOAD_URL);
+  }
   const candidates = [];
   for (const dir of [path.join(__dirname, "dist"), path.join(__dirname, "public", "download")]) {
     try {
