@@ -1213,7 +1213,7 @@
   // ====================================================================
   const callOverlay = $("callOverlay"), localVideo = $("localVideo"), remoteVideo = $("remoteVideo"), callStatus = $("callStatus"), callAvatar = $("callAvatar");
   let localStream = null, peer = null, inCall = false, pendingOffer = null, ringFrom = null, pendingCandidates = [];
-  let screenStream = null;
+  let screenStream = null, screenAdded = false;
 
   let callFailTimer = null;
   function makePeer() {
@@ -1285,37 +1285,53 @@
     if (localStream.getAudioTracks()[0]) localStream.getAudioTracks()[0].enabled = audioEnabled;
     oldStream.getTracks().forEach((t) => t.stop());
   }
+  async function renegotiate() {
+    if (!peer) return;
+    try {
+      if (peer.signalingState !== "stable") return;
+      const o = await peer.createOffer();
+      await peer.setLocalDescription(o);
+      socket.emit("call:offer", o);
+    } catch (e) { console.error("renegotiate failed:", e); }
+  }
   async function startScreenShare() {
     if (!peer) { flash("Start a call before sharing your screen.", "err"); return; }
     let stream;
-    try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false }); }
+    try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false }); }
     catch (e) { return; } // user cancelled
     screenStream = stream;
     const screenTrack = stream.getVideoTracks()[0];
     const sender = peer.getSenders().find((s) => s.track && s.track.kind === "video");
     if (sender) {
-      sender.replaceTrack(screenTrack);
+      // A video track already exists (normal camera call) — just swap the source.
+      try { await sender.replaceTrack(screenTrack); screenAdded = false; }
+      catch (e) { console.error(e); flash("Could not share screen.", "err"); return; }
     } else {
-      // No video sender yet (e.g. call started audio-only) — add one and renegotiate
-      if (typeof peer.onnegotiationneeded !== "function") {
-        peer.onnegotiationneeded = async () => {
-          try { if (peer.signalingState !== "stable") return; const o = await peer.createOffer(); await peer.setLocalDescription(o); socket.emit("call:offer", o); } catch (e) {}
-        };
-      }
+      // Call started audio-only (no video m-line) — add a track and renegotiate.
       peer.addTrack(screenTrack, stream);
+      screenAdded = true;
+      await renegotiate();
     }
     localVideo.srcObject = stream; localVideo.classList.remove("hidden-cam");
     screenTrack.onended = () => stopScreenShare();
-    $("toggleScreen").classList.add("hangup");
+    const ts = $("toggleScreen"); if (ts) { ts.classList.add("hangup"); ts.title = "Stop sharing"; }
     flash("Sharing your screen.");
   }
-  function stopScreenShare() {
+  async function stopScreenShare() {
     if (screenStream) { screenStream.getTracks().forEach((t) => t.stop()); screenStream = null; }
     const sender = peer && peer.getSenders().find((s) => s.track && s.track.kind === "video");
     const camTrack = localStream && localStream.getVideoTracks()[0];
-    if (sender) sender.replaceTrack(camTrack || null);
+    if (sender) {
+      if (screenAdded) {
+        peer.removeTrack(sender);
+        screenAdded = false;
+        await renegotiate();
+      } else {
+        try { await sender.replaceTrack(camTrack || null); } catch (e) {}
+      }
+    }
     if (localStream) { localVideo.srcObject = localStream; localVideo.classList.toggle("hidden-cam", !(localStream.getVideoTracks()[0] && localStream.getVideoTracks()[0].enabled)); }
-    const ts = $("toggleScreen"); if (ts) ts.classList.remove("hangup");
+    const ts = $("toggleScreen"); if (ts) { ts.classList.remove("hangup"); ts.title = "Share screen"; }
   }
   async function startCall(asInitiator) {
     const audio = devices.mic ? { deviceId: { ideal: devices.mic } } : true;
@@ -1359,7 +1375,7 @@
     $("callBtn").classList.remove("hidden"); $("hangupBtn").classList.add("hidden");
     socket.emit("call:end");
     // Stop any active screen share when the call ends
-    if (screenStream) { screenStream.getTracks().forEach((t) => t.stop()); screenStream = null; const ts = $("toggleScreen"); if (ts) ts.classList.remove("hangup"); }
+    if (screenStream) { screenStream.getTracks().forEach((t) => t.stop()); screenStream = null; screenAdded = false; const ts = $("toggleScreen"); if (ts) { ts.classList.remove("hangup"); ts.title = "Share screen"; } }
   }
   function showCallOverlay() { callOverlay.classList.remove("hidden"); $("callPill").classList.add("hidden"); }
   function hideCallOverlay() { callOverlay.classList.add("hidden"); if (inCall) $("callPill").classList.remove("hidden"); }

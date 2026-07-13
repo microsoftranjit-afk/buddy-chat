@@ -280,7 +280,12 @@ async function getTurnServers() {
 app.get("/api/turn", async (req, res) => { res.json({ iceServers: await getTurnServers().catch(() => []) }); });
 app.get("/api/config", async (req, res) => {
   const ice = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
-  if (process.env.TURN_URL) ice.push({ urls: process.env.TURN_URL.split(",").map((s) => s.trim()).filter(Boolean), username: process.env.TURN_USER || "", credential: process.env.TURN_PASS || "" });
+  // Self-hosted / free TURN relay. Env vars win; otherwise read from config.json
+  // so you can run your own coturn server instead of paying for a hosted one.
+  const turnUrl = process.env.TURN_URL || (fileConfig.turn ? (Array.isArray(fileConfig.turn) ? fileConfig.turn.join(",") : fileConfig.turn) : "");
+  const turnUser = process.env.TURN_USER || fileConfig.turnUser || "";
+  const turnPass = process.env.TURN_PASS || fileConfig.turnPass || "";
+  if (turnUrl) ice.push({ urls: turnUrl.split(",").map((s) => s.trim()).filter(Boolean), username: turnUser, credential: turnPass });
   try { (await getTurnServers()).forEach((s) => ice.push(s)); } catch {}
   res.json({ iceServers: ice });
 });

@@ -54,3 +54,28 @@ All preferences are saved per device and applied instantly.
   personal use, not for secrets.
 - One room = one conversation. Anyone who knows the room name can join, so use
   an unguessable name.
+
+## Calling over distance — free, no paid TURN
+
+Buddy is peer-to-peer (WebRTC). Across town or across a country (100km+),
+calls usually connect directly using free public **STUN** servers. When both
+peers are behind restrictive/symmetric NATs, a **TURN relay** is required to
+punch through. The app can use a hosted TURN (Metered.ca, paid) — but you
+don't have to pay:
+
+- **Self-host a free TURN server** (e.g. [coturn](https://github.com/coturn/coturn)
+  on any cheap VPS) and point Buddy at it. Add to `config.json`:
+  ```json
+  "turn": "turn:your.server.com:3478",
+  "turnUser": "buddy",
+  "turnPass": "secret"
+  ```
+  or set the env vars `TURN_URL`, `TURN_USER`, `TURN_PASS` (comma-separate
+  multiple URLs). Remove `meteredKey` from `config.json` to stop using the
+  paid relay entirely.
+- **Screen sharing** works in any 1:1 call: open the call overlay and press
+  the screen icon. It swaps your camera for the screen (or adds a video track
+  and renegotiates automatically if the call started audio-only).
+
+Note: a TURN relay carries the media, so the server must be publicly reachable
+and have enough bandwidth for the call.
