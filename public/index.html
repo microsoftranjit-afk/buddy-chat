@@ -149,6 +149,7 @@
         <div class="side-head">
           <svg class="icon head-icon"><use href="#icon-chat"/></svg>
           <span>Direct Messages</span>
+          <button id="markReadBtn" class="icon-btn side-head-btn" title="Mark all as read" aria-label="Mark all as read"><svg class="icon"><use href="#icon-check"/></svg></button>
         </div>
         <div class="add-friend">
           <svg class="field-icon"><use href="#icon-user-plus"/></svg>
@@ -200,6 +201,7 @@
             <button class="sm-p" data-p="dnd"><span class="ondot dnd"></span>Do Not Disturb</button>
           </div>
           <input id="statusText" type="text" maxlength="64" placeholder="What's happening?" autocomplete="off" />
+          <input id="statusEmoji" type="text" maxlength="8" placeholder="Status emoji (e.g. 🎮)" autocomplete="off" />
           <div class="sm-activity">
             <select id="activityType">
               <option value="">No activity</option>
@@ -220,6 +222,7 @@
     <main class="chat">
       <header class="chat-head">
         <div class="chat-title">
+          <button id="drawerBtn" class="icon-btn drawer-btn" title="Menu" aria-label="Open menu"><svg class="icon"><use href="#icon-more"/></svg></button>
           <div id="peerAvatar" class="avatar small hidden"></div>
           <div class="title-text">
             <div id="roomLabel" class="title-name">Buddy</div>
@@ -235,6 +238,7 @@
           </div>
           <button id="callBtn" class="btn call hidden" title="Start a call"><svg class="icon"><use href="#icon-phone"/></svg><span>Call</span></button>
           <button id="hangupBtn" class="btn hangup hidden" title="End call"><svg class="icon"><use href="#icon-phone-off"/></svg><span>End</span></button>
+          <button id="dmMuteBtn" class="icon-btn hidden" title="Mute conversation" aria-label="Mute conversation"><svg class="icon"><use href="#icon-bell"/></svg></button>
         </div>
       </header>
 
@@ -491,6 +495,17 @@
 
   <!-- Toasts -->
   <div id="toasts" class="toasts"></div>
+
+  <!-- Image lightbox -->
+  <div id="lightbox" class="lightbox hidden" role="dialog" aria-label="Image viewer">
+    <button class="lightbox-close" aria-label="Close" title="Close"><svg class="icon"><use href="#icon-close"/></svg></button>
+    <img alt="Zoomed image" />
+  </div>
+
+  <!-- Jump to latest -->
+  <button id="jumpBtn" class="jump-btn hidden" title="Jump to latest messages" aria-label="Jump to latest messages">
+    <svg class="icon"><use href="#icon-download"/></svg>
+  </button>
 
   <script src="vendor/socket.io.min.js"></script>
   <script src="client.js"></script>

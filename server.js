@@ -25,12 +25,14 @@ const storage = multer.diskStorage({
     cb(null, id + (ext ? "." + ext : ""));
   },
 });
+const DOC_EXT = /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv|zip|rar|7z|json|log)$/i;
 const upload = multer({
   storage,
   limits: { fileSize: 120 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (/^(image|video)\//.test(file.mimetype)) cb(null, true);
-    else cb(new Error("Only image and video files are allowed."));
+    if (/^(image|video)\//.test(file.mimetype)) return cb(null, true);
+    if (DOC_EXT.test(file.originalname)) return cb(null, true);
+    cb(new Error("Unsupported file type."));
   },
 });
 app.use("/uploads", express.static(UPLOAD_DIR));
@@ -78,6 +80,8 @@ for (const k in users) {
   if (!Array.isArray(u.bookmarks)) u.bookmarks = [];
   if (!Array.isArray(u.badges)) u.badges = [];
   if (typeof u.flags !== "number") u.flags = 0;
+  if (typeof u.dmMuted !== "object" || !u.dmMuted) u.dmMuted = {};
+  if (typeof u.statusEmoji !== "string") u.statusEmoji = "";
 }
 for (const id in servers) {
   const s = servers[id];
@@ -87,6 +91,7 @@ for (const id in servers) {
   if (!Array.isArray(s.bans)) s.bans = [];
   if (!Array.isArray(s.audit)) s.audit = [];
   s.channels.forEach((c) => { if (typeof c.slow !== "number") c.slow = 0; if (typeof c.topic !== "string") c.topic = ""; });
+  if (!Array.isArray(s.stickers)) s.stickers = [];
 }
 function saveUsers() { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2)); }
 function saveServers() { fs.writeFileSync(SERVERS_FILE, JSON.stringify(servers, null, 2)); }
@@ -134,6 +139,7 @@ function publicProfile(uname) {
     online: online.has(uname),
     presence: effectivePresence(uname),
     status: u.status || "",
+    statusEmoji: u.statusEmoji || "",
     activity: u.activity || null,
     lastSeen: u.lastSeen || 0,
   };
@@ -168,6 +174,7 @@ function serverView(id) {
     id: s.id, name: s.name, owner: s.owner, iconColor: s.iconColor,
     roles: (s.roles || []).map((r) => ({ id: r.id, name: r.name, color: r.color || "", permissions: r.permissions || 0, members: r.members || [], pos: r.pos || 0 })),
     emojis: s.emojis || [],
+    stickers: s.stickers || [],
     nicknames: s.nicknames || {},
     bans: s.bans || [],
     audit: (s.audit || []).slice(-50),
@@ -325,7 +332,9 @@ app.get("/download", async (req, res) => {
     upload.single("file")(req, res, (err) => {
       if (err) return res.status(400).json({ error: err.message });
       if (!req.file) return res.status(400).json({ error: "No file received." });
-      res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "file").slice(0, 200), kind: req.file.mimetype.startsWith("video") ? "video" : "image", size: req.file.size });
+      const ext = String(req.file.originalname || "");
+      const kind = req.file.mimetype.startsWith("video") ? "video" : (DOC_EXT.test(ext) ? "file" : "image");
+      res.json({ ok: true, url: "/uploads/" + req.file.filename, name: String(req.file.originalname || "file").slice(0, 200), kind, size: req.file.size });
     });
   });
 
@@ -400,6 +409,8 @@ app.post("/api/presence", (req, res) => {
   const { presence, status, activity } = req.body || {};
   if (typeof presence === "string" && ["online", "idle", "dnd"].includes(presence)) u.presence = presence;
   if (typeof status === "string") u.status = status.slice(0, 64);
+  if (typeof req.body.statusEmoji === "string") u.statusEmoji = (req.body.statusEmoji || "").slice(0, 8);
+  else if (req.body.statusEmoji === null) u.statusEmoji = "";
   if (activity && typeof activity === "object" && activity !== null) {
     if (ACTIVITY_TYPES.includes(activity.type)) {
       const name = String(activity.name || "").slice(0, 64).trim();
@@ -537,9 +548,10 @@ app.post("/api/servers/invite", (req, res) => {
   const s = servers[id];
   if (!s) return res.status(404).json({ error: "Server not found." });
   if (!s.members.includes(uname)) return res.status(403).json({ error: "You're not in this server." });
-  if (!users[who]) return res.status(404).json({ error: "No user with that username." });
-  if (s.members.includes(who)) return res.status(409).json({ error: "Already a member." });
-  s.members.push(who);
+   if (!users[who]) return res.status(404).json({ error: "No user with that username." });
+   if (!users[uname].friends.includes(who)) return res.status(403).json({ error: "You can only add friends directly. Share an invite link to let others join." });
+   if (s.members.includes(who)) return res.status(409).json({ error: "Already a member." });
+   s.members.push(who);
   if (!users[who].servers.includes(id)) users[who].servers.push(id);
   saveServers(); saveUsers();
   emitServersTo(uname); emitServersTo(who);
@@ -718,6 +730,7 @@ io.on("connection", (socket) => {
     arr.forEach((m) => { if (idSet.has(m.id) && m.user && !m.deleted) { m.readBy = m.readBy || []; if (!m.readBy.includes(socket.user)) { m.readBy.push(socket.user); touched.push(m.id); } } });
     if (touched.length) { scheduleSaveHistory(); io.to(socket.activeRoom).emit("read", { user: socket.user, ids: touched }); }
   });
+  socket.on("unread:clear-all", () => { if (!ensureAuth()) return; const m = unread.get(socket.user); if (m) { unread.set(socket.user, {}); emitUnread(socket.user); } });
 
   socket.on("message", (text, replyTo) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
@@ -741,7 +754,8 @@ io.on("connection", (socket) => {
   socket.on("file", ({ url, kind, name, size, replyTo }) => {
     if (!ensureAuth() || !socket.activeRoom || !canPost(socket.activeRoom, socket.user)) return;
     if (!/^\/uploads\//.test(url)) return;
-    deliver(socket.activeRoom, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: kind === "video" ? "video" : "image", url: url.slice(0, 400), name: String(name || "").slice(0, 200), size: Number(size) || 0, ts: Date.now(), replyTo: replyTo ? { id: replyTo } : null }, socket.user);
+    const k = ["video", "image", "file"].includes(kind) ? kind : "image";
+    deliver(socket.activeRoom, { id: Date.now() + "-" + socket.id + "-" + crypto.randomBytes(3).toString("hex"), user: users[socket.user].username, kind: k, url: url.slice(0, 400), name: String(name || "").slice(0, 200), size: Number(size) || 0, ts: Date.now(), replyTo: replyTo ? { id: replyTo } : null }, socket.user);
   });
 
   socket.on("edit", ({ id, text }) => {
@@ -897,7 +911,23 @@ app.post("/api/servers/emoji", (req, res) => {
     if (s.emojis.length >= 50) return res.status(400).json({ error: "Emoji limit reached." });
     const e = { name: nm, url }; s.emojis.push(e); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true, emoji: e });
   }
-  if (action === "del") { s.emojis = s.emojis.filter((e) => e.name !== name); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true }); }
+   if (action === "del") { s.emojis = s.emojis.filter((e) => e.name !== name); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true }); }
+   res.status(400).json({ error: "Unknown action." });
+});
+app.post("/api/servers/sticker", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { serverId, action, name, url } = req.body || {};
+  const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+  if (!(s.owner === uname || (permsFor(s, uname) & PERMS.MANAGE))) return res.status(403).json({ error: "Need Manage Server." });
+  s.stickers = s.stickers || [];
+  if (action === "add") {
+    const nm = (name || "").toLowerCase().replace(/[^a-z0-9_]/g, "");
+    if (!nm) return res.status(400).json({ error: "Invalid sticker name." });
+    if (!/^\/uploads\//.test(url || "")) return res.status(400).json({ error: "Sticker must be an uploaded image." });
+    if (s.stickers.length >= 50) return res.status(400).json({ error: "Sticker limit reached." });
+    const st = { name: nm, url }; s.stickers.push(st); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true, sticker: st });
+  }
+  if (action === "del") { s.stickers = s.stickers.filter((e) => e.name !== name); saveServers(); s.members.forEach((m) => emitServersTo(m)); return res.json({ ok: true }); }
   res.status(400).json({ error: "Unknown action." });
 });
 function doKickBan(req, res, kind) {
@@ -961,11 +991,19 @@ app.post("/api/servers/notif", (req, res) => {
   users[uname].notif[serverId] = mode; saveUsers();
   res.json({ ok: true, notif: users[uname].notif });
 });
-app.get("/api/servers/:id/bans", (req, res) => {
+app.get("/api/servers/:id/audit", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
   const s = servers[req.params.id]; if (!s) return res.status(404).json({ error: "Server not found." });
   if (!serverAdmin(s, uname)) return res.status(403).json({ error: "Missing permission." });
-  res.json({ bans: (s.bans || []).map((u) => publicProfile(u)).filter(Boolean) });
+  res.json({ audit: (s.audit || []).slice(-100).reverse() });
+});
+app.post("/api/friends/dm-mute", (req, res) => {
+  const uname = requireUser(req, res); if (!uname) return;
+  const { target, on } = req.body || {};
+  const t = norm(target); if (!users[t]) return res.status(404).json({ error: "No user." });
+  users[uname].dmMuted = users[uname].dmMuted || {};
+  users[uname].dmMuted[t] = !!on; saveUsers();
+  res.json({ ok: true, dmMuted: users[uname].dmMuted });
 });
 
 // ---- Friends: favorites / notes / nicknames ----
@@ -1031,7 +1069,20 @@ app.get("/api/bookmarks", (req, res) => {
 // ---- Search & history pagination ----
 app.get("/api/search", (req, res) => {
   const uname = requireUser(req, res); if (!uname) return;
-  const room = req.query.room; const q = String(req.query.q || "").toLowerCase().slice(0, 80);
+  const q = String(req.query.q || "").toLowerCase().slice(0, 80);
+  const serverId = req.query.serverId;
+  if (serverId) {
+    const s = servers[serverId]; if (!s) return res.status(404).json({ error: "Server not found." });
+    if (!s.members.includes(uname)) return res.status(403).json({ error: "No access." });
+    const out = [];
+    for (const ch of s.channels) {
+      const room = "chan:" + ch.id;
+      roomMsgs(room).forEach((m) => { if (!m.deleted && m.text && m.text.toLowerCase().includes(q)) out.push({ channel: ch.name, ...m }); });
+    }
+    out.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    return res.json({ results: out.slice(-80) });
+  }
+  const room = req.query.room;
   if (!canPost(room, uname)) return res.status(403).json({ error: "No access." });
   const arr = roomMsgs(room);
   const results = arr.filter((m) => !m.deleted && m.text && m.text.toLowerCase().includes(q)).slice(-50);

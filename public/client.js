@@ -65,8 +65,9 @@
   let myUser = localStorage.getItem("buddy-user") || "";
   let myName = localStorage.getItem("buddy-name") || "";
   let myPic = localStorage.getItem("buddy-pic") || "";
-  let myPresence = "online", myStatus = "", myActivity = null, manualActivity = false;
+   let myPresence = "online", myStatus = "", myStatusEmoji = "", myActivity = null, manualActivity = false;
   let unreadMap = {};
+  let dmMuted = {};
   let typingName = null, typingTimer = null;
   function persistAuth() { localStorage.setItem("buddy-token", token); localStorage.setItem("buddy-user", myUser); localStorage.setItem("buddy-name", myName); localStorage.setItem("buddy-pic", myPic); }
   function saveLogin() { if (window.buddyDesktop && window.buddyDesktop.saveLogin) { try { window.buddyDesktop.saveLogin({ token, user: myUser, name: myName, pic: myPic }); } catch {} } }
@@ -328,7 +329,7 @@
   }
   function renderMyIdentity(p) {
     myName = p.displayName; myPic = p.pic || "";
-    myPresence = p.presence || "online"; myStatus = p.status || ""; myActivity = p.activity || null;
+    myPresence = p.presence || "online"; myStatus = p.status || ""; myStatusEmoji = p.statusEmoji || ""; myActivity = p.activity || null;
     $("meName").textContent = myName;
     renderMyAvatar();
     $("nameEdit").value = myName;
@@ -409,15 +410,27 @@
   socket.on("dm-roster", (list) => list.forEach(setProfile));
 
   socket.on("unread", (obj) => { unreadMap = obj || {}; if (view === "dm") renderFriendsDom(); else renderServerView(); renderRail(); });
+  const typingUsers = new Set();
+  function typingLabelText() {
+    const names = [...typingUsers].map((u) => (profiles.get(u) || {}).displayName || u);
+    if (names.length === 1) return names[0] + " is typing…";
+    if (names.length === 2) return names[0] + " and " + names[1] + " are typing…";
+    if (names.length === 3) return names[0] + ", " + names[1] + " and " + names[2] + " are typing…";
+    return names[0] + " and " + (names.length - 1) + " others are typing…";
+  }
   socket.on("typing", ({ from, user, on }) => {
     const inDm = view === "dm" && activePeer && user === activePeer.username;
     const inChan = view === "server" && activeChannel && activeServer && (() => { const s = state.servers.find((x) => x.id === activeServer); return s && (s.members || []).includes(user); })();
     if (!inDm && !inChan) return;
-    if (on) { typingName = from; clearTimeout(typingTimer); typingTimer = setTimeout(() => { typingName = null; updateHeader(); hideTyping(); }, 4000); updateHeader(); showTyping(from); }
-    else if (typingName === from) { typingName = null; updateHeader(); hideTyping(); }
+    if (on) typingUsers.add(user); else typingUsers.delete(user);
+    clearTimeout(typingTimer);
+    if (typingUsers.size) {
+      typingTimer = setTimeout(() => { typingUsers.clear(); typingName = null; updateHeader(); hideTyping(); }, 4000);
+      typingName = typingLabelText(); showTyping(typingName); updateHeader();
+    } else { typingName = null; updateHeader(); hideTyping(); }
   });
   const typingBubble = $("typingBubble"), typingText = $("typingText");
-  function showTyping(name) { if (!typingBubble) return; typingText.textContent = name + " is typing…"; typingBubble.classList.remove("hidden"); }
+  function showTyping(label) { if (!typingBubble) return; typingText.textContent = label; typingBubble.classList.remove("hidden"); }
   function hideTyping() { if (typingBubble) typingBubble.classList.add("hidden"); }
 
   // ====================================================================
@@ -438,6 +451,9 @@
     });
   }
   $("homeBtn").onclick = () => selectHome();
+  $("drawerBtn").onclick = () => { const sb = document.querySelector(".sidebar"); if (sb) sb.classList.toggle("open"); };
+  $("dmMuteBtn").onclick = () => { if (!activePeer) return; const u = activePeer.username; const on = !dmMuted[u]; setDmMuted(u, on); updateHeader(); flash(on ? "Muted." : "Unmuted."); };
+  $("markReadBtn").onclick = () => { try { socket.emit("unread:clear-all"); } catch {} unreadMap = {}; renderFriendsDom(); renderServerView(); renderRail(); flash("Marked all read."); };
   $("addServerBtn").onclick = () => openPrompt("Create a server", "Server name", async (name) => {
     const res = await api("/api/servers/create", { name }, true);
     if (!res.ok) return flash(res.error || "Could not create server.", "err");
@@ -676,20 +692,22 @@
       peerAvatar.classList.remove("hidden"); peerAvatar.innerHTML = ""; peerAvatar.appendChild(avatarEl(activePeer.displayName, activePeer.pic, ""));
       roomLabel.textContent = activePeer.displayName;
       if (typingName) {
-        presence.textContent = typingName + " is typing…";
+        presence.textContent = typingName;
       } else {
         const p = profiles.get(activePeer.username) || activePeer;
         presence.textContent = headerPresence(p);
         presence.classList.add(presenceDotClass(p.presence));
       }
       $("callBtn").classList.remove("hidden");
+      const mb = $("dmMuteBtn"); if (mb) { mb.classList.remove("hidden"); const muted = !!dmMuted[activePeer.username]; mb.classList.toggle("muted", muted); mb.title = muted ? "Unmute conversation" : "Mute conversation"; }
     } else if (view === "server" && activeServer) {
       const s = state.servers.find((x) => x.id === activeServer);
       const ch = s && s.channels.find((c) => c.id === activeChannel);
       peerAvatar.classList.add("hidden");
       roomLabel.textContent = ch ? "# " + ch.name : "Server";
-      presence.textContent = typingName ? typingName + " is typing…" : (s ? s.name : "");
+      presence.textContent = typingName ? typingName : (s ? s.name : "");
       $("callBtn").classList.add("hidden");
+      const mb = $("dmMuteBtn"); if (mb) mb.classList.add("hidden");
     } else {
       peerAvatar.classList.add("hidden"); roomLabel.textContent = "Buddy"; presence.textContent = "Select a friend or server to start"; $("callBtn").classList.add("hidden");
     }
@@ -743,21 +761,26 @@
       const bubble = document.createElement("div"); bubble.className = "bubble" + (m.kind ? " media" : "");
       if (m.kind === "poll") { renderPoll(bubble, m); }
       else if (m.kind) {
-        if (m.kind === "sticker") { const img = document.createElement("img"); img.src = m.url; img.alt = "sticker"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); bubble.classList.add("sticker"); }
+        if (m.kind === "sticker") { const img = document.createElement("img"); img.src = m.url; img.alt = "sticker"; img.className = "zoomable"; img.addEventListener("click", () => zoomImage(m.url)); bubble.appendChild(img); bubble.classList.add("sticker"); }
         else if (m.kind === "video") {
           const v = document.createElement("video"); v.src = m.url; v.controls = true; v.playsInline = true; v.preload = "metadata"; bubble.appendChild(v);
           const cap = document.createElement("div"); cap.className = "file-size"; cap.style.padding = "6px 4px 2px"; cap.textContent = "Video" + (m.size ? " · " + fmtSize(m.size) : ""); bubble.appendChild(cap);
         }
-        else if (m.kind === "image") { const img = document.createElement("img"); img.src = m.url; img.alt = m.name || "image"; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
+        else if (m.kind === "file") {
+          const card = document.createElement("a"); card.className = "file-card"; card.href = m.url; card.target = "_blank"; card.rel = "noopener"; card.download = m.name || "file";
+          card.innerHTML = '<span class="file-icon"><svg class="icon"><use href="#icon-note"/></svg></span><span class="file-meta"><span class="file-name">' + escapeHtml(m.name || "File") + '</span><span class="file-sub">' + (m.size ? fmtSize(m.size) : "Download") + "</span></span>";
+          bubble.appendChild(card);
+        }
+        else if (m.kind === "image") { const img = document.createElement("img"); img.src = m.url; img.alt = m.name || "image"; img.loading = "lazy"; img.className = "zoomable"; img.addEventListener("click", () => zoomImage(m.url)); bubble.appendChild(img); }
         else if (m.kind === "gif") {
           if (m.format === "video") {
-            const v = document.createElement("video"); v.src = m.url; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.preload = "auto"; v.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(v);
+            const v = document.createElement("video"); v.src = m.url; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.preload = "auto"; v.className = "zoomable"; v.addEventListener("click", () => zoomImage(m.url)); bubble.appendChild(v);
           } else {
-            const img = document.createElement("img"); img.src = m.url; img.alt = "GIF"; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img);
+            const img = document.createElement("img"); img.src = m.url; img.alt = "GIF"; img.loading = "lazy"; img.className = "zoomable"; img.addEventListener("click", () => zoomImage(m.url)); bubble.appendChild(img);
           }
           bubble.classList.add("gif");
         }
-        else { const img = document.createElement("img"); img.src = m.url; img.alt = m.kind; img.loading = "lazy"; img.addEventListener("click", () => window.open(m.url, "_blank")); bubble.appendChild(img); }
+        else { const img = document.createElement("img"); img.src = m.url; img.alt = m.kind; img.loading = "lazy"; img.className = "zoomable"; img.addEventListener("click", () => zoomImage(m.url)); bubble.appendChild(img); }
       } else {
         bubble.innerHTML = renderText(m.text);
         if (m.edited) { const ed = document.createElement("span"); ed.className = "edited-tag"; ed.textContent = "(edited)"; bubble.appendChild(ed); }
@@ -782,8 +805,10 @@
       el.appendChild(tools);
       el._msg = m;
     }
-    messagesEl.appendChild(el); messagesEl.scrollTop = messagesEl.scrollHeight;
-    if (!mine && settings.sound && m.kind !== "sticker" && m.kind !== "gif") playPing();
+    messagesEl.appendChild(el);
+    const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 140;
+    if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight; else showJumpPill();
+    if (!mine && settings.sound && m.kind !== "sticker" && m.kind !== "gif" && !isDmMuted(m.user)) playPing();
   }
   function renderReactions(el, wrap, m) {
     const bar = document.createElement("div"); bar.className = "reactions";
@@ -850,6 +875,23 @@
     el.classList.remove("flash-target"); void el.offsetWidth; el.classList.add("flash-target");
     setTimeout(() => el.classList.remove("flash-target"), 1600);
   }
+
+  // Image lightbox
+  function zoomImage(url) { const lb = $("lightbox"); if (!lb) { window.open(url, "_blank"); return; } lb.querySelector("img").src = url; lb.classList.remove("hidden"); }
+  $("lightbox") && $("lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox" || e.target.closest(".lightbox-close")) $("lightbox").classList.add("hidden"); });
+
+  // Jump-to-latest pill
+  function showJumpPill() { const b = $("jumpBtn"); if (b) b.classList.remove("hidden"); }
+  function hideJumpPill() { const b = $("jumpBtn"); if (b) b.classList.add("hidden"); }
+  messagesEl.addEventListener("scroll", () => { const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 140; if (nearBottom) hideJumpPill(); });
+  $("jumpBtn") && $("jumpBtn").addEventListener("click", () => { messagesEl.scrollTop = messagesEl.scrollHeight; hideJumpPill(); });
+
+  // Per-DM mute (persisted locally + server)
+  const DM_MUTE_KEY = "buddy-dmMuted";
+  dmMuted = {}; try { dmMuted = JSON.parse(localStorage.getItem(DM_MUTE_KEY) || "{}") || {}; } catch {}
+  function saveDmMuted() { try { localStorage.setItem(DM_MUTE_KEY, JSON.stringify(dmMuted)); } catch {} }
+  function isDmMuted(u) { return view === "dm" && activePeer && activePeer.username === u && !!dmMuted[u]; }
+  function setDmMuted(u, on) { dmMuted[u] = !!on; saveDmMuted(); api("/api/friends/dm-mute", { target: u, on }, true).catch(() => {}); }
 
   function send() {
     const t = msgInput.value.trim(); if (!t) return;
@@ -985,7 +1027,7 @@
     const activity = type ? { type, name, details } : null;
     manualActivity = !!activity;
     if (window.buddyDesktop && window.buddyDesktop.setManualOverride) window.buddyDesktop.setManualOverride(manualActivity);
-    const res = await api("/api/presence", { presence: smPresence, status: $("statusText").value.trim(), activity }, true);
+    const res = await api("/api/presence", { presence: smPresence, status: $("statusText").value.trim(), statusEmoji: $("statusEmoji").value.trim(), activity }, true);
     if (res && res.ok && res.profile) { myPresence = res.profile.presence; myStatus = res.profile.status; myActivity = res.profile.activity; renderMyStatus(); }
     closeStatusMenu();
   });
@@ -1055,7 +1097,9 @@
   $("fileInput").addEventListener("change", (e) => { handleFiles(e.target.files); e.target.value = ""; });
   function handleFiles(files) {
     [...(files || [])].forEach((file) => {
-      if (!/^(image|video)\//.test(file.type)) { flash("Only images and videos can be sent."); return; }
+      const isMedia = /^(image|video)\//.test(file.type);
+      const isDoc = /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv|zip|rar|7z|json|log)$/i.test(file.name);
+      if (!isMedia && !isDoc) { flash("Only images, videos and documents can be sent."); return; }
       uploadFile(file);
     });
   }
@@ -1249,7 +1293,17 @@
     screenStream = stream;
     const screenTrack = stream.getVideoTracks()[0];
     const sender = peer.getSenders().find((s) => s.track && s.track.kind === "video");
-    if (sender) sender.replaceTrack(screenTrack);
+    if (sender) {
+      sender.replaceTrack(screenTrack);
+    } else {
+      // No video sender yet (e.g. call started audio-only) — add one and renegotiate
+      if (typeof peer.onnegotiationneeded !== "function") {
+        peer.onnegotiationneeded = async () => {
+          try { if (peer.signalingState !== "stable") return; const o = await peer.createOffer(); await peer.setLocalDescription(o); socket.emit("call:offer", o); } catch (e) {}
+        };
+      }
+      peer.addTrack(screenTrack, stream);
+    }
     localVideo.srcObject = stream; localVideo.classList.remove("hidden-cam");
     screenTrack.onended = () => stopScreenShare();
     $("toggleScreen").classList.add("hangup");

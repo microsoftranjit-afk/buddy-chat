@@ -35,20 +35,34 @@
     '<div id="emojiGrid" class="emoji-grid"></div>';
   root.appendChild(emojiPanel);
   const emojiInput = $("emojiSearch"), emojiGrid = $("emojiGrid"), emojiCats = $("emojiCats");
+  function getAllStickers() {
+    const out = [];
+    (B.state.servers || []).forEach((s) => (s.stickers || []).forEach((st) => out.push(st)));
+    return out;
+  }
+  function sendSticker(url) { socket.emit("media", { url, kind: "sticker" }); hideEmoji(); }
   function renderEmojiCats() {
     emojiCats.innerHTML = "";
-    Object.keys(EMOJI).forEach((cat, i) => {
-      const b = ce("button", "emoji-cat" + (i === 0 ? " active" : ""), cat.slice(0, 2));
-      b.title = cat; b.onclick = () => { [...emojiCats.children].forEach((x) => x.classList.remove("active")); b.classList.add("active"); renderEmojiGrid(EMOJI[cat]); };
+    const cats = ["Stickers"].concat(Object.keys(EMOJI));
+    cats.forEach((cat, i) => {
+      const b = ce("button", "emoji-cat" + (i === 0 ? " active" : ""), cat === "Stickers" ? "Stk" : cat.slice(0, 2));
+      b.title = cat; b.onclick = () => { [...emojiCats.children].forEach((x) => x.classList.remove("active")); b.classList.add("active"); renderEmojiGrid(cat === "Stickers" ? getAllStickers() : EMOJI[cat]); };
       emojiCats.appendChild(b);
     });
   }
   function renderEmojiGrid(list) {
     emojiGrid.innerHTML = "";
-    list.forEach((e) => {
-      const c = ce("button", "emoji-cell", e);
-      c.onclick = () => pickEmoji(e);
-      emojiGrid.appendChild(c);
+    (list || []).forEach((e) => {
+      if (e && e.url) {
+        const c = ce("button", "emoji-cell sticker-cell");
+        const img = ce("img"); img.src = e.url; img.alt = e.name || "sticker"; c.appendChild(img);
+        c.onclick = () => sendSticker(e.url);
+        emojiGrid.appendChild(c);
+      } else {
+        const c = ce("button", "emoji-cell", e);
+        c.onclick = () => pickEmoji(e);
+        emojiGrid.appendChild(c);
+      }
     });
   }
   function pickEmoji(e) {
@@ -115,6 +129,39 @@
   msgInput.addEventListener("blur", stopTyping);
   msgInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !msgInput.disabled) stopTyping(); }, true);
   const sendBtnEl = $("sendBtn"); if (sendBtnEl) sendBtnEl.addEventListener("click", stopTyping);
+
+  // Emoji :shortcode: autocomplete
+  const emojiAC = ce("div", "emoji-ac hidden"); root.appendChild(emojiAC);
+  let emojiACItems = [], emojiACIndex = -1;
+  function closeEmojiAC() { emojiAC.classList.add("hidden"); emojiACItems = []; emojiACIndex = -1; }
+  function highlightAC() { [...emojiAC.children].forEach((c, i) => c.classList.toggle("active", i === emojiACIndex)); }
+  function positionEmojiAC() { const r = msgInput.getBoundingClientRect(); emojiAC.style.left = Math.max(8, r.left) + "px"; emojiAC.style.bottom = (window.innerHeight - r.top + 6) + "px"; }
+  function applyEmojiAC(e) {
+    const v = msgInput.value; const m = v.slice(0, msgInput.selectionStart).match(/(:)([a-z0-9_+\-]*)$/i);
+    if (m) { const start = msgInput.selectionStart - m[0].length; msgInput.value = v.slice(0, start) + e + v.slice(msgInput.selectionEnd); const pos = start + e.length; msgInput.setSelectionRange(pos, pos); }
+    closeEmojiAC(); msgInput.focus();
+  }
+  function openEmojiAC(q) {
+    const ql = q.toLowerCase();
+    emojiACItems = EMOJI_FLAT.filter((x) => x.toLowerCase().includes(ql)).slice(0, 8);
+    if (!emojiACItems.length) return closeEmojiAC();
+    emojiAC.innerHTML = "";
+    emojiACItems.forEach((e, i) => { const b = ce("button", "emoji-ac-item" + (i === 0 ? " active" : ""), e); b.onclick = () => applyEmojiAC(e); emojiAC.appendChild(b); });
+    emojiAC.classList.remove("hidden"); emojiACIndex = 0; positionEmojiAC();
+  }
+  msgInput.addEventListener("input", () => {
+    const v = msgInput.value.slice(0, msgInput.selectionStart || 0);
+    const m = v.match(/(:)([a-z0-9_+\-]*)$/i);
+    if (m) openEmojiAC(m[2]); else closeEmojiAC();
+  });
+  msgInput.addEventListener("keydown", (e) => {
+    if (emojiAC.classList.contains("hidden")) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); emojiACIndex = (emojiACIndex + 1) % emojiACItems.length; highlightAC(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); emojiACIndex = (emojiACIndex - 1 + emojiACItems.length) % emojiACItems.length; highlightAC(); }
+    else if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); applyEmojiAC(emojiACItems[emojiACIndex]); }
+    else if (e.key === "Escape") { closeEmojiAC(); }
+  });
+  document.addEventListener("click", (e) => { if (!emojiAC.contains(e.target) && e.target !== msgInput) closeEmojiAC(); });
 
   // Slash commands (capture phase so we beat the client's Enter handler)
   msgInput.addEventListener("keydown", (e) => {
@@ -446,6 +493,9 @@
           api("/api/servers/emoji", { serverId: id, action: "add", name: name, url: url }, true).then((r) => r.ok ? (flash("Emoji added."), openSrvSettings()) : flash(r.error || "No.", "err"));
         });
       }; body.append(ei, ea);
+      body.appendChild(ce("div", "srv-sec", "<b>Custom stickers</b>"));
+      const stk = ce("div", "srv-emoji"); (s.stickers || []).forEach((e) => { const i = ce("span", "srv-em"); const im = ce("img"); im.src = e.url; i.appendChild(im); const del = ce("button", "srv-em-del", "×"); del.title = "Delete sticker"; del.onclick = () => api("/api/servers/sticker", { serverId: id, action: "del", name: e.name }, true).then((r) => r.ok ? openSrvSettings() : flash(r.error || "No.", "err")); i.appendChild(del); stk.appendChild(i); }); body.appendChild(stk);
+      const si2 = ce("input"); si2.placeholder = "sticker name"; const sa = ce("button", "reset-btn", "Upload sticker"); sa.onclick = () => { if (!si2.value) return flash("Name required."); openPrompt("Upload sticker :" + si2.value + ":", "paste /uploads/ URL", (url) => { if (!url.startsWith("/uploads/")) return flash("Upload an image first (attach button), then paste its /uploads URL.", "err"); api("/api/servers/sticker", { serverId: id, action: "add", name: si2.value, url: url }, true).then((r) => r.ok ? (flash("Sticker added."), openSrvSettings()) : flash(r.error || "No.", "err")); }); }; body.append(si2, sa);
       body.appendChild(ce("div", "srv-sec", "<b>Bans (" + (s.bans || []).length + ")</b>"));
       (s.bans || []).forEach((u) => { const row = ce("div", "srv-row"); row.textContent = "@" + u; const ub = ce("button", "reset-btn", "Unban"); ub.onclick = () => api("/api/servers/unban", { serverId: id, target: u }, true).then(() => openSrvSettings()); row.appendChild(ub); body.appendChild(row); });
       body.appendChild(ce("div", "srv-sec", "<b>Invite</b>"));
